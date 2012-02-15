@@ -1,7 +1,11 @@
 *.lo
 *.o
+*.orig
+*.patch
+*.swp
 .deps/
 .libs/
+gmon.out
 po/*.gmo
 po/messages.mo
 /aclocal.m4
@@ -92,6 +96,9 @@ src/libgcrypt.la
 src/mpicalc
 src/versioninfo.rc
 src/*.exe
+tags
+TAGS
+test-driver
 tests/Makefile
 tests/ac
 tests/ac-data
@@ -129,3 +136,5 @@ tests/t-sexp
 tests/tsexp
 tests/version
 tests/*.exe
+tests/*.log
+tests/*.trs
