@@ -104,6 +104,10 @@ static struct cipher_table_entry
     { &_gcry_cipher_spec_idea,
       &dummy_extra_spec,                  GCRY_CIPHER_IDEA },
 #endif
+#if USE_GOST28147
+    { &_gcry_cipher_spec_gost28147,
+      &dummy_extra_spec,                  GCRY_CIPHER_GOST28147 },
+#endif
     { NULL                    }
   };
 
