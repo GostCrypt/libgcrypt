@@ -405,6 +405,15 @@ gcry_err_code_t _gcry_cipher_ccm_check_tag
 /*           */ (gcry_cipher_hd_t c,
                  const unsigned char *intag, size_t taglen);
 
+/*-- cipher-cntgost.c --*/
+gcry_err_code_t _gcry_cipher_cntgost_encrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, unsigned int outbuflen,
+                 const unsigned char *inbuf, unsigned int inbuflen);
+gcry_err_code_t _gcry_cipher_cntgost_decrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, unsigned int outbuflen,
+                 const unsigned char *inbuf, unsigned int inbuflen);
 
 /*-- cipher-gcm.c --*/
 gcry_err_code_t _gcry_cipher_gcm_encrypt

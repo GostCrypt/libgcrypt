@@ -417,6 +417,7 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
       case GCRY_CIPHER_MODE_CFB:
       case GCRY_CIPHER_MODE_CFB8:
       case GCRY_CIPHER_MODE_OFB:
+      case GCRY_CIPHER_MODE_CNTGOST:
       case GCRY_CIPHER_MODE_CTR:
       case GCRY_CIPHER_MODE_AESWRAP:
       case GCRY_CIPHER_MODE_CMAC:
@@ -459,6 +460,11 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
       default:
 	err = GPG_ERR_INV_CIPHER_MODE;
       }
+
+  /* It is defined only for 64-bit block ciphers */
+  if (!err && mode == GCRY_CIPHER_MODE_CNTGOST &&
+          spec->blocksize != 8)
+    err = GPG_ERR_INV_CIPHER_MODE;
 
   /* Perform selftest here and mark this with a flag in cipher_table?
      No, we should not do this as it takes too long.  Further it does
@@ -911,6 +917,10 @@ cipher_encrypt (gcry_cipher_hd_t c, byte *outbuf, size_t outbuflen,
       rc = _gcry_cipher_ofb_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
 
+    case GCRY_CIPHER_MODE_CNTGOST:
+      rc = _gcry_cipher_cntgost_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
+      break;
+
     case GCRY_CIPHER_MODE_CTR:
       rc = _gcry_cipher_ctr_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
@@ -1040,6 +1050,10 @@ cipher_decrypt (gcry_cipher_hd_t c, byte *outbuf, size_t outbuflen,
 
     case GCRY_CIPHER_MODE_OFB:
       rc = _gcry_cipher_ofb_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
+      break;
+
+    case GCRY_CIPHER_MODE_CNTGOST:
+      rc = _gcry_cipher_cntgost_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
 
     case GCRY_CIPHER_MODE_CTR:
