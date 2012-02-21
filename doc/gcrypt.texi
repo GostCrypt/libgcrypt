@@ -1667,6 +1667,14 @@ set to 12 (for 96 bit) or 8 (for 64 bit) provided for the
 
 Note that the use of @code{gcry_cipher_final} is required.
 
+@item GCRY_CIPHER_MODE_OFBGOST
+@cindex OFBGOST, Output Feedback mode from GOST 28147-89
+GOST 28147-89 declares a special variant of OFB mode. In the original
+text it is called 'gammirovanie'. In RFC-5830 it is called 'counter
+encryption' mode. Internally it looks like plain OFB with small
+additional transmutation on cryptostream. This mode may be used
+with any 64 bit block length algorithm.
+
 @end table
 
 @node Working with cipher handles
