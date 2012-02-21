@@ -636,6 +636,7 @@ gcry_cipher_open (gcry_cipher_hd_t *handle,
       case GCRY_CIPHER_MODE_CBC:
       case GCRY_CIPHER_MODE_CFB:
       case GCRY_CIPHER_MODE_OFB:
+      case GCRY_CIPHER_MODE_OFBGOST:
       case GCRY_CIPHER_MODE_CTR:
       case GCRY_CIPHER_MODE_AESWRAP:
 	if ((cipher->encrypt == dummy_encrypt_block)
@@ -925,6 +926,10 @@ cipher_encrypt (gcry_cipher_hd_t c, byte *outbuf, unsigned int outbuflen,
       rc = _gcry_cipher_ofb_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
 
+    case GCRY_CIPHER_MODE_OFBGOST:
+      rc = _gcry_cipher_ofbgost_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
+      break;
+
     case GCRY_CIPHER_MODE_CTR:
       rc = _gcry_cipher_ctr_encrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
@@ -1016,6 +1021,10 @@ cipher_decrypt (gcry_cipher_hd_t c, byte *outbuf, unsigned int outbuflen,
 
     case GCRY_CIPHER_MODE_OFB:
       rc = _gcry_cipher_ofb_decrypt (c, outbuf, outbuflen, inbuf, inbuflen);
+      break;
+
+    case GCRY_CIPHER_MODE_OFBGOST:
+      rc = _gcry_cipher_ofbgost_decrypt (c, outbuf, outbuflen, inbuf, inbuflen);
       break;
 
     case GCRY_CIPHER_MODE_CTR:

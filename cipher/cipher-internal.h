@@ -177,5 +177,15 @@ gcry_err_code_t _gcry_cipher_aeswrap_decrypt
                    const byte *inbuf, unsigned int inbuflen);
 
 
+/*-- cipher-ofbgost.c --*/
+gcry_err_code_t _gcry_cipher_ofbgost_encrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, unsigned int outbuflen,
+                 const unsigned char *inbuf, unsigned int inbuflen);
+gcry_err_code_t _gcry_cipher_ofbgost_decrypt
+/*           */ (gcry_cipher_hd_t c,
+                 unsigned char *outbuf, unsigned int outbuflen,
+                 const unsigned char *inbuf, unsigned int inbuflen);
+
 
 #endif /*G10_CIPHER_INTERNAL_H*/

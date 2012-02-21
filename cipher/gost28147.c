@@ -26,7 +26,9 @@
  * - MAC mode
  *
  * This implementation handles ECB and CFB modes via usual libgcrypt handling.
- * OFB-like and MAC modes are unsupported.
+ * OFB-like 'counter encryption' mode is implemented via generic cipher mode
+ * (GCRY_CIPHER_OFBGOST).
+ * MAC mode is unsupported.
  */
 
 #include <config.h>
