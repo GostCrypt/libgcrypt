@@ -1514,6 +1514,11 @@ A 128 bit cipher as described by RFC4269.
 The Camellia cipher by NTT.  See
 @uref{http://info.isl.ntt.co.jp/@/crypt/@/eng/@/camellia/@/specifications.html}.
 
+@item GCRY_CIPHER_GOST28147
+@cindex GOST 28147-89
+The GOST 28147-89 cipher, defined in the respective GOST standard.
+Translation of this GOST into English is provided in the RFC-5830.
+
 @end table
 
 @node Available cipher modes
@@ -1562,6 +1567,15 @@ in-place encryption is still allowed.  On decryption the output buffer
 may be specified 64 bit (8 byte) shorter than then input buffer.  As
 per specs the input length must be at least 128 bits and the length
 must be a multiple of 64 bits.
+
+@item GCRY_CIPHER_MODE_OFBGOST
+@cindex OFBGOST, Output Feedback mode from GOST 28147-89
+GOST 28147-89 declares a special variant of OFB mode. In the original
+text it is called 'gammirovanie'. In RFC-5830 it is called 'counter
+encryption' mode. Internally it looks like plain OFB with small
+additional transmutation on cryptostream. This mode may be used
+with any 64 bit block length algorithm.
+
 
 @end table
 
