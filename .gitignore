@@ -29,7 +29,16 @@ cipher/Makefile
 cipher/libcipher.la
 compat/Makefile
 compat/libcompat.la
+doc/gcrypt.??
+doc/gcrypt.aux
+doc/gcrypt.cps
+doc/gcrypt.dvi
+doc/gcrypt.fns
+doc/gcrypt.html/
 doc/gcrypt.info
+doc/gcrypt.log
+doc/gcrypt.pdf
+doc/gcrypt.toc
 doc/stamp-vti
 doc/version.texi
 doc/Makefile
