@@ -56,6 +56,10 @@ static struct digest_table_entry
     { &_gcry_digest_spec_crc24_rfc2440,
       &dummy_extra_spec,                 GCRY_MD_CRC24_RFC2440, 1 },
 #endif
+#ifdef USE_GOST3411
+    { &_gcry_digest_spec_gost3411,
+      &dummy_extra_spec,                 GCRY_MD_GOST3411 },
+#endif
 #if USE_MD4
     { &_gcry_digest_spec_md4,
       &dummy_extra_spec,                 GCRY_MD_MD4 },

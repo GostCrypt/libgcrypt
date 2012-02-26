@@ -182,7 +182,7 @@ available_pubkey_ciphers="dsa elgamal rsa ecc"
 enabled_pubkey_ciphers=""
 
 # Definitions for message digests.
-available_digests="crc md4 md5 rmd160 sha1 sha256"
+available_digests="crc gost3411 md4 md5 rmd160 sha1 sha256"
 available_digests_64="sha512 tiger whirlpool"
 enabled_digests=""
 
@@ -1120,6 +1120,12 @@ LIST_MEMBER(crc, $enabled_digests)
 if test "$found" = "1" ; then
    GCRYPT_DIGESTS="$GCRYPT_DIGESTS crc.lo"
    AC_DEFINE(USE_CRC, 1, [Defined if this module should be included])
+fi
+
+LIST_MEMBER(gost3411, $enabled_digests)
+if test "$found" = "1" ; then
+   GCRYPT_DIGESTS="$GCRYPT_DIGESTS gost3411.lo"
+   AC_DEFINE(USE_GOST3411, 1, [Defined if this module should be included])
 fi
 
 LIST_MEMBER(md4, $enabled_digests)
