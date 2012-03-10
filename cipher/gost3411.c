@@ -117,19 +117,18 @@ do_apply_c2 (unsigned char *u)
   u[31] ^= 0xff;
 }
 
-static void
-do_phi (unsigned char *e, int rounds)
-{
-  unsigned char temp1, temp2;
-  int i;
+#define do_phi_step(e, i) \
+  e[(0 + 2*i) % 32] ^= e[(2 + 2*i) % 32] ^ e[(4 + 2*i) % 32] ^ e[(6 + 2*i) % 32] ^ e[(24 + 2*i) % 32] ^ e[(30 + 2*i) % 32]; \
+  e[(1 + 2*i) % 32] ^= e[(3 + 2*i) % 32] ^ e[(5 + 2*i) % 32] ^ e[(7 + 2*i) % 32] ^ e[(25 + 2*i) % 32] ^ e[(31 + 2*i) % 32];
 
-  for (i = 0; i < rounds; i++)
+static void
+do_phi_submix (unsigned char *e, unsigned char *x, int round)
+{
+  int i;
+  round *= 2;
+  for (i = 0; i < 32; i++)
     {
-      temp1 = e[0] ^ e[2] ^ e[4] ^ e[6] ^ e[24] ^ e[30];
-      temp2 = e[1] ^ e[3] ^ e[5] ^ e[7] ^ e[25] ^ e[31];
-      memmove (e, e+2, 30);
-      e[30] = temp1;
-      e[31] = temp2;
+      e[(i + round) % 32] ^= x[i];
     }
 }
 
@@ -192,22 +191,35 @@ do_hash_step (unsigned char *h, unsigned char *m)
     do_a2 (v);
   }
 
-  do_phi (s, 12);
-
-  for (i = 0; i < 32; i++)
+  for (i = 0; i < 5; i++)
     {
-      s[i] ^= m[i];
+      do_phi_step (s, 0);
+      do_phi_step (s, 1);
+      do_phi_step (s, 2);
+      do_phi_step (s, 3);
+      do_phi_step (s, 4);
+      do_phi_step (s, 5);
+      do_phi_step (s, 6);
+      do_phi_step (s, 7);
+      do_phi_step (s, 8);
+      do_phi_step (s, 9);
+      /* That is in total 12 + 1 + 61 = 74 = 16 * 4 + 10 rounds */
+      if (i == 4)
+        break;
+      do_phi_step (s, 10);
+      do_phi_step (s, 11);
+      if (i == 0)
+        do_phi_submix(s, m, 12);
+      do_phi_step (s, 12);
+      if (i == 0)
+        do_phi_submix(s, h, 13);
+      do_phi_step (s, 13);
+      do_phi_step (s, 14);
+      do_phi_step (s, 15);
     }
 
-  do_phi (s, 1);
-
-  for (i = 0; i < 32; i++)
-    {
-      s[i] ^= h[i];
-    }
-
-  do_phi (s, 61);
-  memcpy (h, s, 32);
+  memcpy (h, s+20, 12);
+  memcpy (h+12, s, 20);
 
   gcry_cipher_close (hd);
 }
