@@ -28,9 +28,11 @@
 #include "cipher.h"
 #include "hash-common.h"
 
+#include "gost.h"
 
 typedef struct {
   gcry_md_block_ctx_t bctx;
+  GOST28147_context hd;
   byte h[32];
   byte sigma[32];
   u32 len;
@@ -44,6 +46,7 @@ gost3411_init (void *context)
 {
   GOST3411_CONTEXT *hd = context;
 
+  memset (&hd->hd, 0, sizeof(hd->hd));
   memset (hd->h, 0, 32);
   memset (hd->sigma, 0, 32);
 
@@ -146,22 +149,11 @@ do_add (unsigned char *s, unsigned char *a)
 }
 
 static void
-do_hash_step (unsigned char *h, unsigned char *m)
+do_hash_step (GOST28147_context *hd, unsigned char *h, unsigned char *m)
 {
   unsigned char u[32], v[32], s[32];
   unsigned char k[32];
   int i;
-
-  gcry_cipher_hd_t hd;
-  gcry_error_t err;
-
-  err = gcry_cipher_open (&hd, GCRY_CIPHER_GOST28147, GCRY_CIPHER_MODE_ECB, 0);
-  if (err) {
-    fprintf (stderr, "LibGCrypt error %s/%s\n",
-        gcry_strsource (err),
-        gcry_strerror (err));
-    exit (1);
-  }
 
   memcpy (u, h, 32);
   memcpy (v, m, 32);
@@ -169,21 +161,7 @@ do_hash_step (unsigned char *h, unsigned char *m)
   for (i = 0; i < 4; i++) {
     do_p (k, u, v);
 
-    err = gcry_cipher_setkey (hd, k, sizeof (k));
-    if (err) {
-      fprintf (stderr, "LibGCrypt error %s/%s\n",
-          gcry_strsource (err),
-          gcry_strerror (err));
-      exit (1);
-    }
-
-    err = gcry_cipher_encrypt (hd, s+i * 8, 8, h+i*8, 8);
-    if (err) {
-      fprintf (stderr, "LibGCrypt error %s/%s\n",
-          gcry_strsource (err),
-          gcry_strerror (err));
-      exit (1);
-    }
+    gost_enc_one (hd, k, s + i*8, h + i*8);
 
     do_a (u);
     if (i == 1)
@@ -220,8 +198,6 @@ do_hash_step (unsigned char *h, unsigned char *m)
 
   memcpy (h, s+20, 12);
   memcpy (h+12, s, 20);
-
-  gcry_cipher_close (hd);
 }
 
 
@@ -232,7 +208,7 @@ transform (void *ctx, const unsigned char *data)
   byte m[32];
 
   memcpy (m, data, 32);
-  do_hash_step (hd->h, m);
+  do_hash_step (&hd->hd, hd->h, m);
   do_add (hd->sigma, m);
 }
 
@@ -276,8 +252,8 @@ gost3411_final (void *context)
       nblocks /= 256;
     }
 
-  do_hash_step (hd->h, l);
-  do_hash_step (hd->h, hd->sigma);
+  do_hash_step (&hd->hd, hd->h, l);
+  do_hash_step (&hd->hd, hd->h, hd->sigma);
 }
 
 static byte *

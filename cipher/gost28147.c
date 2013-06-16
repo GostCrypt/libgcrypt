@@ -62,11 +62,7 @@ unsigned char test_sbox[16 * 8] = {
   0x3, 0x9, 0xB, 0x3, 0x2, 0xE, 0xC, 0xC,
 };
 
-typedef struct {
-  u32 subst[4][256];
-  u32 key[8];
-  int subst_set;
-} GOST28147_context;
+#include "gost.h"
 
 static gcry_err_code_t
 gost_setkey (void *c, const byte *key, unsigned keylen)
@@ -159,6 +155,13 @@ gost_encrypt_block (void *c, byte *outbuf, const byte *inbuf)
   outbuf[1 + 4] = (n1 >> (1 * 8)) & 0xff;
   outbuf[2 + 4] = (n1 >> (2 * 8)) & 0xff;
   outbuf[3 + 4] = (n1 >> (3 * 8)) & 0xff;
+}
+
+void gost_enc_one (GOST28147_context *c, const byte *key,
+    byte *out, byte *in)
+{
+  gost_setkey (c, key, 32);
+  gost_encrypt_block (c, out, in);
 }
 
 static void
