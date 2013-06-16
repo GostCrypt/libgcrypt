@@ -69,7 +69,9 @@ struct gcry_mpi
   int sign;	       /* Indicates a negative number and is also used
 		          for opaque MPIs to store the length.  */
   unsigned int flags; /* Bit 0: Array to be allocated in secure memory space.*/
-                      /* Bit 2: the limb is a pointer to some m_alloced data.*/
+                      /* Bit 2: The limb is a pointer to some m_alloced data.*/
+                      /* Bit 4: Immutable MPI - the MPI may not be modified.  */
+                      /* Bit 5: Constant MPI - the MPI will not be freed.  */
   mpi_limb_t *d;      /* Array with the limbs */
 };
 
@@ -104,10 +106,16 @@ struct gcry_mpi
   gcry_mpi_t  _gcry_mpi_copy( gcry_mpi_t a );
 #endif
 
-#define mpi_is_opaque(a) ((a) && ((a)->flags&4))
-#define mpi_is_secure(a) ((a) && ((a)->flags&1))
+void _gcry_mpi_immutable_failed (void);
+#define mpi_immutable_failed() _gcry_mpi_immutable_failed ()
+
+#define mpi_is_const(a)       ((a) && ((a)->flags&32))
+#define mpi_is_immutable(a)   ((a) && ((a)->flags&16))
+#define mpi_is_opaque(a)      ((a) && ((a)->flags&4))
+#define mpi_is_secure(a)      ((a) && ((a)->flags&1))
 #define mpi_clear(a)          _gcry_mpi_clear ((a))
 #define mpi_alloc_like(a)     _gcry_mpi_alloc_like((a))
+#define mpi_snatch(a,b)       _gcry_mpi_snatch ((a),(b))
 #define mpi_set(a,b)          _gcry_mpi_set ((a),(b))
 #define mpi_set_ui(a,b)       _gcry_mpi_set_ui ((a),(b))
 #define mpi_get_ui(a,b)       _gcry_mpi_get_ui ((a),(b))
@@ -116,6 +124,7 @@ struct gcry_mpi
 #define mpi_swap(a,b)         _gcry_mpi_swap ((a),(b))
 #define mpi_new(n)            _gcry_mpi_new ((n))
 #define mpi_snew(n)           _gcry_mpi_snew ((n))
+#define mpi_const(n)          _gcry_mpi_const ((n))
 
 void _gcry_mpi_clear( gcry_mpi_t a );
 gcry_mpi_t  _gcry_mpi_alloc_like( gcry_mpi_t a );
@@ -125,6 +134,23 @@ void _gcry_mpi_m_check( gcry_mpi_t a );
 void _gcry_mpi_swap( gcry_mpi_t a, gcry_mpi_t b);
 gcry_mpi_t _gcry_mpi_new (unsigned int nbits);
 gcry_mpi_t _gcry_mpi_snew (unsigned int nbits);
+
+/* Constants used to return constant MPIs.  See _gcry_mpi_init if you
+   want to add more constants. */
+#define MPI_NUMBER_OF_CONSTANTS 6
+enum gcry_mpi_constants
+  {
+    MPI_C_ZERO,
+    MPI_C_ONE,
+    MPI_C_TWO,
+    MPI_C_THREE,
+    MPI_C_FOUR,
+    MPI_C_EIGHT
+  };
+
+
+gcry_mpi_t _gcry_mpi_const (enum gcry_mpi_constants no);
+
 
 /*-- mpicoder.c --*/
 void  _gcry_log_mpidump( const char *text, gcry_mpi_t a );
@@ -230,33 +256,53 @@ void _gcry_mpi_normalize( gcry_mpi_t a );
 /*-- ec.c --*/
 
 /* Object to represent a point in projective coordinates. */
-struct mpi_point_s;
-typedef struct mpi_point_s mpi_point_t;
-struct mpi_point_s
+struct gcry_mpi_point
 {
   gcry_mpi_t x;
   gcry_mpi_t y;
   gcry_mpi_t z;
 };
+typedef struct gcry_mpi_point mpi_point_struct;
+typedef struct gcry_mpi_point *mpi_point_t;
+
+void _gcry_mpi_point_init (mpi_point_t p);
+void _gcry_mpi_point_free_parts (mpi_point_t p);
+void _gcry_mpi_get_point (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                          mpi_point_t point);
+void _gcry_mpi_snatch_point (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                             mpi_point_t point);
 
 /* Context used with elliptic curve functions.  */
 struct mpi_ec_ctx_s;
 typedef struct mpi_ec_ctx_s *mpi_ec_t;
 
-void _gcry_mpi_ec_point_init (mpi_point_t *p);
-void _gcry_mpi_ec_point_free (mpi_point_t *p);
-mpi_ec_t _gcry_mpi_ec_init (gcry_mpi_t p, gcry_mpi_t a);
+mpi_ec_t _gcry_mpi_ec_p_internal_new (gcry_mpi_t p, gcry_mpi_t a);
 void _gcry_mpi_ec_free (mpi_ec_t ctx);
-int _gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t *point,
+int _gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t point,
                              mpi_ec_t ctx);
-void _gcry_mpi_ec_dup_point (mpi_point_t *result,
-                             mpi_point_t *point, mpi_ec_t ctx);
-void _gcry_mpi_ec_add_points (mpi_point_t *result,
-                              mpi_point_t *p1, mpi_point_t *p2,
+void _gcry_mpi_ec_dup_point (mpi_point_t result,
+                             mpi_point_t point, mpi_ec_t ctx);
+void _gcry_mpi_ec_add_points (mpi_point_t result,
+                              mpi_point_t p1, mpi_point_t p2,
                               mpi_ec_t ctx);
-void _gcry_mpi_ec_mul_point (mpi_point_t *result,
-                             gcry_mpi_t scalar, mpi_point_t *point,
+void _gcry_mpi_ec_mul_point (mpi_point_t result,
+                             gcry_mpi_t scalar, mpi_point_t point,
                              mpi_ec_t ctx);
+
+gcry_mpi_t _gcry_mpi_ec_ec2os (gcry_mpi_point_t point, mpi_ec_t ectx);
+
+gpg_err_code_t _gcry_mpi_ec_p_new (gcry_ctx_t *r_ctx,
+                                   gcry_mpi_t p, gcry_mpi_t a);
+gpg_err_code_t _gcry_mpi_ec_new (gcry_ctx_t *r_ctx,
+                                 gcry_sexp_t keyparam, const char *curvename);
+gcry_mpi_t _gcry_mpi_ec_get_mpi (const char *name, gcry_ctx_t ctx, int copy);
+gcry_mpi_point_t _gcry_mpi_ec_get_point (const char *name,
+                                         gcry_ctx_t ctx, int copy);
+gpg_err_code_t _gcry_mpi_ec_set_mpi (const char *name, gcry_mpi_t newvalue,
+                                     gcry_ctx_t ctx);
+gpg_err_code_t _gcry_mpi_ec_set_point (const char *name,
+                                       gcry_mpi_point_t newvalue,
+                                       gcry_ctx_t ctx);
 
 
 

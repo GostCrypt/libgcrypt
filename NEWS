@@ -2,14 +2,20 @@ Noteworthy changes in version 1.6.0 (unreleased)
 ------------------------------------------------
 
  * Removed the long deprecated gcry_ac interface.  Thus Libgcrypt is
-   not anymore ABI compatible too previous versions.
+   not anymore ABI compatible to previous versions if they used the ac
+   interface.
 
  * Removed the module register subsystem.
 
  * The deprecated message digest debug macros have been removed.  Use
    gcry_md_debug instead.
 
- * Add support for the IDEA cipher algorithm.
+ * Added support for the IDEA cipher algorithm.
+
+ * Added a random number generator to directly use the system's RNG.
+   Also added an interface to prefer the use of a specified RNG.
+
+ * Added support for the SCRYPT algorithm.
 
  * Interface changes relative to the 1.5.0 release:
  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -27,7 +33,43 @@ Noteworthy changes in version 1.6.0 (unreleased)
  gcry_md_list           REMOVED.
  gcry_md_start_debug    REMOVED (macro).
  gcry_md_stop_debug     REMOVED (macro).
-
+ GCRYCTL_SET_ENFORCED_FIPS_FLAG  NEW.
+ GCRYCTL_SET_PREFERRED_RNG_TYPE  NEW.
+ GCRYCTL_GET_CURRENT_RNG_TYPE    NEW.
+ GCRY_RNG_TYPE_STANDARD          NEW.
+ GCRY_RNG_TYPE_FIPS              NEW.
+ GCRY_RNG_TYPE_SYSTEM            NEW.
+ gcry_mpi_snatch                 NEW.
+ gcry_mpi_point_t                NEW.
+ gcry_mpi_point_new              NEW.
+ gcry_mpi_point_release          NEW.
+ gcry_mpi_point_get              NEW.
+ gcry_mpi_point_snatch_get       NEW.
+ gcry_mpi_point_set              NEW.
+ gcry_mpi_point_snatch_set       NEW.
+ gcry_ctx_t                      NEW.
+ gcry_ctx_release                NEW.
+ gcry_mpi_ec_new                 NEW.
+ gcry_mpi_ec_get_mpi             NEW.
+ gcry_mpi_ec_get_point           NEW.
+ gcry_mpi_ec_set_mpi             NEW.
+ gcry_mpi_ec_set_point           NEW.
+ gcry_mpi_ec_get_affine          NEW.
+ gcry_mpi_ec_dup                 NEW.
+ gcry_mpi_ec_add                 NEW.
+ gcry_mpi_ec_mul                 NEW.
+ GCRYMPI_FLAG_IMMUTABLE          NEW.
+ GCRYMPI_FLAG_CONST              NEW.
+ GCRYMPI_CONST_ONE               NEW.
+ GCRYMPI_CONST_TWO               NEW.
+ GCRYMPI_CONST_THREE             NEW.
+ GCRYMPI_CONST_FOUR              NEW.
+ GCRYMPI_CONST_EIGHT             NEW.
+ GCRYPT_VERSION_NUMBER           NEW.
+ GCRY_KDF_SCRYPT                 NEW.
+ gcry_pubkey_get_sexp            NEW.
+ GCRYCTL_DISABLE_LOCKED_SECMEM   NEW.
+ GCRYCTL_DISABLE_PRIV_DROP       NEW.
 
 
 Noteworthy changes in version 1.5.0 (2011-06-29)
@@ -697,6 +739,7 @@ Noteworthy changes in version 1.1.3 (2001-05-31)
 
 Copyright 2001, 2002, 2003, 2004, 2007, 2008,
           2009, 2011 Free Software Foundation, Inc.
+Copyright 2013 g10 Code GmbH
 
 This file is free software; as a special exception the author gives
 unlimited permission to copy and/or distribute it, with or without

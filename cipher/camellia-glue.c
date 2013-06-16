@@ -62,12 +62,52 @@
 #include "g10lib.h"
 #include "cipher.h"
 #include "camellia.h"
+#include "bufhelp.h"
+#include "cipher-selftest.h"
+
+/* Helper macro to force alignment to 16 bytes.  */
+#ifdef HAVE_GCC_ATTRIBUTE_ALIGNED
+# define ATTR_ALIGNED_16  __attribute__ ((aligned (16)))
+#else
+# define ATTR_ALIGNED_16
+#endif
+
+/* USE_AESNI inidicates whether to compile with Intel AES-NI/AVX code. */
+#undef USE_AESNI_AVX
+#if defined(ENABLE_AESNI_SUPPORT) && defined(ENABLE_AVX_SUPPORT)
+# if defined(__x86_64__)
+#  define USE_AESNI_AVX 1
+# endif
+#endif
 
 typedef struct
 {
   int keybitlength;
   KEY_TABLE_TYPE keytable;
+#ifdef USE_AESNI_AVX
+  int use_aesni_avx;		/* AES-NI/AVX implementation shall be used.  */
+#endif /*USE_AESNI_AVX*/
 } CAMELLIA_context;
+
+#ifdef USE_AESNI_AVX
+/* Assembler implementations of Camellia using AES-NI and AVX.  Process data
+   in 16 block same time.
+ */
+extern void _gcry_camellia_aesni_avx_ctr_enc(CAMELLIA_context *ctx,
+					     unsigned char *out,
+					     const unsigned char *in,
+					     unsigned char *ctr);
+
+extern void _gcry_camellia_aesni_avx_cbc_dec(CAMELLIA_context *ctx,
+					     unsigned char *out,
+					     const unsigned char *in,
+					     unsigned char *iv);
+
+extern void _gcry_camellia_aesni_avx_cfb_dec(CAMELLIA_context *ctx,
+					     unsigned char *out,
+					     const unsigned char *in,
+					     unsigned char *iv);
+#endif
 
 static const char *selftest(void);
 
@@ -101,6 +141,15 @@ camellia_setkey(void *c, const byte *key, unsigned keylen)
      +3*2*sizeof(void*)                     /* Function calls.  */
      );
 
+#ifdef USE_AESNI_AVX
+  ctx->use_aesni_avx = 0;
+  if ((_gcry_get_hw_features () & HWF_INTEL_AESNI) &&
+      (_gcry_get_hw_features () & HWF_INTEL_AVX))
+    {
+      ctx->use_aesni_avx = 1;
+    }
+#endif
+
   return 0;
 }
 
@@ -110,12 +159,15 @@ camellia_encrypt(void *c, byte *outbuf, const byte *inbuf)
   CAMELLIA_context *ctx=c;
 
   Camellia_EncryptBlock(ctx->keybitlength,inbuf,ctx->keytable,outbuf);
-  _gcry_burn_stack
-    (sizeof(int)+2*sizeof(unsigned char *)+sizeof(KEY_TABLE_TYPE)
-     +4*sizeof(u32)
-     +2*sizeof(u32*)+4*sizeof(u32)
-     +2*2*sizeof(void*) /* Function calls.  */
-    );
+
+#define CAMELLIA_encrypt_stack_burn_size \
+  (sizeof(int)+2*sizeof(unsigned char *)+sizeof(void*/*KEY_TABLE_TYPE*/) \
+     +4*sizeof(u32)+4*sizeof(u32) \
+     +2*sizeof(u32*)+4*sizeof(u32) \
+     +2*2*sizeof(void*) /* Function calls.  */ \
+    )
+
+  _gcry_burn_stack(CAMELLIA_encrypt_stack_burn_size);
 }
 
 static void
@@ -124,12 +176,235 @@ camellia_decrypt(void *c, byte *outbuf, const byte *inbuf)
   CAMELLIA_context *ctx=c;
 
   Camellia_DecryptBlock(ctx->keybitlength,inbuf,ctx->keytable,outbuf);
-  _gcry_burn_stack
-    (sizeof(int)+2*sizeof(unsigned char *)+sizeof(KEY_TABLE_TYPE)
-     +4*sizeof(u32)
-     +2*sizeof(u32*)+4*sizeof(u32)
-     +2*2*sizeof(void*) /* Function calls.  */
-    );
+
+#define CAMELLIA_decrypt_stack_burn_size \
+    (sizeof(int)+2*sizeof(unsigned char *)+sizeof(void*/*KEY_TABLE_TYPE*/) \
+     +4*sizeof(u32)+4*sizeof(u32) \
+     +2*sizeof(u32*)+4*sizeof(u32) \
+     +2*2*sizeof(void*) /* Function calls.  */ \
+    )
+
+  _gcry_burn_stack(CAMELLIA_decrypt_stack_burn_size);
+}
+
+/* Bulk encryption of complete blocks in CTR mode.  This function is only
+   intended for the bulk encryption feature of cipher.c.  CTR is expected to be
+   of size CAMELLIA_BLOCK_SIZE. */
+void
+_gcry_camellia_ctr_enc(void *context, unsigned char *ctr,
+                       void *outbuf_arg, const void *inbuf_arg,
+                       unsigned int nblocks)
+{
+  CAMELLIA_context *ctx = context;
+  unsigned char *outbuf = outbuf_arg;
+  const unsigned char *inbuf = inbuf_arg;
+  unsigned char tmpbuf[CAMELLIA_BLOCK_SIZE];
+  int burn_stack_depth = CAMELLIA_encrypt_stack_burn_size;
+  int i;
+
+#ifdef USE_AESNI_AVX
+  if (ctx->use_aesni_avx)
+    {
+      int did_use_aesni_avx = 0;
+
+      /* Process data in 16 block chunks. */
+      while (nblocks >= 16)
+        {
+          _gcry_camellia_aesni_avx_ctr_enc(ctx, outbuf, inbuf, ctr);
+
+          nblocks -= 16;
+          outbuf += 16 * CAMELLIA_BLOCK_SIZE;
+          inbuf  += 16 * CAMELLIA_BLOCK_SIZE;
+          did_use_aesni_avx = 1;
+        }
+
+      if (did_use_aesni_avx)
+        {
+          /* clear AVX registers */
+          asm volatile ("vzeroall;\n":::);
+
+          if (burn_stack_depth < 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *))
+            burn_stack_depth = 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *);
+        }
+
+      /* Use generic code to handle smaller chunks... */
+      /* TODO: use caching instead? */
+    }
+#endif
+
+  for ( ;nblocks; nblocks-- )
+    {
+      /* Encrypt the counter. */
+      Camellia_EncryptBlock(ctx->keybitlength, ctr, ctx->keytable, tmpbuf);
+      /* XOR the input with the encrypted counter and store in output.  */
+      buf_xor(outbuf, tmpbuf, inbuf, CAMELLIA_BLOCK_SIZE);
+      outbuf += CAMELLIA_BLOCK_SIZE;
+      inbuf  += CAMELLIA_BLOCK_SIZE;
+      /* Increment the counter.  */
+      for (i = CAMELLIA_BLOCK_SIZE; i > 0; i--)
+        {
+          ctr[i-1]++;
+          if (ctr[i-1])
+            break;
+        }
+    }
+
+  wipememory(tmpbuf, sizeof(tmpbuf));
+  _gcry_burn_stack(burn_stack_depth);
+}
+
+/* Bulk decryption of complete blocks in CBC mode.  This function is only
+   intended for the bulk encryption feature of cipher.c. */
+void
+_gcry_camellia_cbc_dec(void *context, unsigned char *iv,
+                       void *outbuf_arg, const void *inbuf_arg,
+                       unsigned int nblocks)
+{
+  CAMELLIA_context *ctx = context;
+  unsigned char *outbuf = outbuf_arg;
+  const unsigned char *inbuf = inbuf_arg;
+  unsigned char savebuf[CAMELLIA_BLOCK_SIZE];
+  int burn_stack_depth = CAMELLIA_decrypt_stack_burn_size;
+
+#ifdef USE_AESNI_AVX
+  if (ctx->use_aesni_avx)
+    {
+      int did_use_aesni_avx = 0;
+
+      /* Process data in 16 block chunks. */
+      while (nblocks >= 16)
+        {
+          _gcry_camellia_aesni_avx_cbc_dec(ctx, outbuf, inbuf, iv);
+
+          nblocks -= 16;
+          outbuf += 16 * CAMELLIA_BLOCK_SIZE;
+          inbuf  += 16 * CAMELLIA_BLOCK_SIZE;
+          did_use_aesni_avx = 1;
+        }
+
+      if (did_use_aesni_avx)
+        {
+          /* clear AVX registers */
+          asm volatile ("vzeroall;\n":::);
+
+          if (burn_stack_depth < 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *))
+            burn_stack_depth = 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *);
+        }
+
+      /* Use generic code to handle smaller chunks... */
+    }
+#endif
+
+  for ( ;nblocks; nblocks-- )
+    {
+      /* We need to save INBUF away because it may be identical to
+         OUTBUF.  */
+      memcpy(savebuf, inbuf, CAMELLIA_BLOCK_SIZE);
+
+      Camellia_DecryptBlock(ctx->keybitlength, inbuf, ctx->keytable, outbuf);
+
+      buf_xor(outbuf, outbuf, iv, CAMELLIA_BLOCK_SIZE);
+      memcpy(iv, savebuf, CAMELLIA_BLOCK_SIZE);
+      inbuf += CAMELLIA_BLOCK_SIZE;
+      outbuf += CAMELLIA_BLOCK_SIZE;
+    }
+
+  wipememory(savebuf, sizeof(savebuf));
+  _gcry_burn_stack(burn_stack_depth);
+}
+
+/* Bulk decryption of complete blocks in CFB mode.  This function is only
+   intended for the bulk encryption feature of cipher.c. */
+void
+_gcry_camellia_cfb_dec(void *context, unsigned char *iv,
+                       void *outbuf_arg, const void *inbuf_arg,
+                       unsigned int nblocks)
+{
+  CAMELLIA_context *ctx = context;
+  unsigned char *outbuf = outbuf_arg;
+  const unsigned char *inbuf = inbuf_arg;
+  int burn_stack_depth = CAMELLIA_decrypt_stack_burn_size;
+
+#ifdef USE_AESNI_AVX
+  if (ctx->use_aesni_avx)
+    {
+      int did_use_aesni_avx = 0;
+
+      /* Process data in 16 block chunks. */
+      while (nblocks >= 16)
+        {
+          _gcry_camellia_aesni_avx_cfb_dec(ctx, outbuf, inbuf, iv);
+
+          nblocks -= 16;
+          outbuf += 16 * CAMELLIA_BLOCK_SIZE;
+          inbuf  += 16 * CAMELLIA_BLOCK_SIZE;
+          did_use_aesni_avx = 1;
+        }
+
+      if (did_use_aesni_avx)
+        {
+          /* clear AVX registers */
+          asm volatile ("vzeroall;\n":::);
+
+          if (burn_stack_depth < 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *))
+            burn_stack_depth = 16 * CAMELLIA_BLOCK_SIZE + 2 * sizeof(void *);
+        }
+
+      /* Use generic code to handle smaller chunks... */
+    }
+#endif
+
+  for ( ;nblocks; nblocks-- )
+    {
+      Camellia_EncryptBlock(ctx->keybitlength, iv, ctx->keytable, iv);
+      buf_xor_n_copy(outbuf, iv, inbuf, CAMELLIA_BLOCK_SIZE);
+      outbuf += CAMELLIA_BLOCK_SIZE;
+      inbuf  += CAMELLIA_BLOCK_SIZE;
+    }
+
+  _gcry_burn_stack(burn_stack_depth);
+}
+
+/* Run the self-tests for CAMELLIA-CTR-128, tests IV increment of bulk CTR
+   encryption.  Returns NULL on success. */
+static const char*
+selftest_ctr_128 (void)
+{
+  const int nblocks = 16+1;
+  const int blocksize = CAMELLIA_BLOCK_SIZE;
+  const int context_size = sizeof(CAMELLIA_context);
+
+  return _gcry_selftest_helper_ctr("CAMELLIA", &camellia_setkey,
+           &camellia_encrypt, &_gcry_camellia_ctr_enc, nblocks, blocksize,
+	   context_size);
+}
+
+/* Run the self-tests for CAMELLIA-CBC-128, tests bulk CBC decryption.
+   Returns NULL on success. */
+static const char*
+selftest_cbc_128 (void)
+{
+  const int nblocks = 16+2;
+  const int blocksize = CAMELLIA_BLOCK_SIZE;
+  const int context_size = sizeof(CAMELLIA_context);
+
+  return _gcry_selftest_helper_cbc("CAMELLIA", &camellia_setkey,
+           &camellia_encrypt, &_gcry_camellia_cbc_dec, nblocks, blocksize,
+	   context_size);
+}
+
+/* Run the self-tests for CAMELLIA-CFB-128, tests bulk CFB decryption.
+   Returns NULL on success. */
+static const char*
+selftest_cfb_128 (void)
+{
+  const int nblocks = 16+2;
+  const int blocksize = CAMELLIA_BLOCK_SIZE;
+  const int context_size = sizeof(CAMELLIA_context);
+
+  return _gcry_selftest_helper_cfb("CAMELLIA", &camellia_setkey,
+           &camellia_encrypt, &_gcry_camellia_cfb_dec, nblocks, blocksize,
+	   context_size);
 }
 
 static const char *
@@ -137,6 +412,7 @@ selftest(void)
 {
   CAMELLIA_context ctx;
   byte scratch[16];
+  const char *r;
 
   /* These test vectors are from RFC-3713 */
   const byte plaintext[]=
@@ -199,6 +475,15 @@ selftest(void)
   camellia_decrypt(&ctx,scratch,scratch);
   if(memcmp(scratch,plaintext,sizeof(plaintext))!=0)
     return "CAMELLIA-256 test decryption failed.";
+
+  if ( (r = selftest_ctr_128 ()) )
+    return r;
+
+  if ( (r = selftest_cbc_128 ()) )
+    return r;
+
+  if ( (r = selftest_cfb_128 ()) )
+    return r;
 
   return NULL;
 }

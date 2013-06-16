@@ -1,5 +1,6 @@
 /* visibility.c - Wrapper for all public functions.
  * Copyright (C) 2007, 2008, 2011  Free Software Foundation, Inc.
+ * Copyright (C) 2013  g10 Code GmbH
  *
  * This file is part of Libgcrypt.
  *
@@ -23,8 +24,8 @@
 #define _GCRY_INCLUDED_BY_VISIBILITY_C
 #include "g10lib.h"
 #include "cipher-proto.h"
-
-
+#include "context.h"
+#include "mpi.h"
 
 const char *
 gcry_strerror (gcry_error_t err)
@@ -261,6 +262,12 @@ gcry_mpi_copy (const gcry_mpi_t a)
   return _gcry_mpi_copy (a);
 }
 
+void
+gcry_mpi_snatch (gcry_mpi_t w, const gcry_mpi_t u)
+{
+  return _gcry_mpi_snatch (w, u);
+}
+
 gcry_mpi_t
 gcry_mpi_set (gcry_mpi_t w, const gcry_mpi_t u)
 {
@@ -414,6 +421,107 @@ gcry_mpi_invm (gcry_mpi_t x, gcry_mpi_t a, gcry_mpi_t m)
   return _gcry_mpi_invm (x, a, m);
 }
 
+gcry_mpi_point_t
+gcry_mpi_point_new (unsigned int nbits)
+{
+  return _gcry_mpi_point_new (nbits);
+}
+
+void
+gcry_mpi_point_release (gcry_mpi_point_t point)
+{
+  _gcry_mpi_point_release (point);
+}
+
+void
+gcry_mpi_point_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                    gcry_mpi_point_t point)
+{
+  _gcry_mpi_point_get (x, y, z, point);
+}
+
+void
+gcry_mpi_point_snatch_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                           gcry_mpi_point_t point)
+{
+  _gcry_mpi_point_snatch_get (x, y, z, point);
+}
+
+gcry_mpi_point_t
+gcry_mpi_point_set (gcry_mpi_point_t point,
+                    gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z)
+{
+  return _gcry_mpi_point_set (point, x, y, z);
+}
+
+gcry_mpi_point_t
+gcry_mpi_point_snatch_set (gcry_mpi_point_t point,
+                           gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z)
+{
+  return _gcry_mpi_point_snatch_set (point, x, y, z);
+}
+
+gpg_error_t
+gcry_mpi_ec_new (gcry_ctx_t *r_ctx,
+                 gcry_sexp_t keyparam, const char *curvename)
+{
+  return gpg_error (_gcry_mpi_ec_new (r_ctx, keyparam, curvename));
+}
+
+gcry_mpi_t
+gcry_mpi_ec_get_mpi (const char *name, gcry_ctx_t ctx, int copy)
+{
+  return _gcry_mpi_ec_get_mpi (name, ctx, copy);
+}
+
+gcry_mpi_point_t
+gcry_mpi_ec_get_point (const char *name, gcry_ctx_t ctx, int copy)
+{
+  return _gcry_mpi_ec_get_point (name, ctx, copy);
+}
+
+gpg_error_t
+gcry_mpi_ec_set_mpi (const char *name, gcry_mpi_t newvalue, gcry_ctx_t ctx)
+{
+  return gpg_error (_gcry_mpi_ec_set_mpi (name, newvalue, ctx));
+}
+
+gpg_error_t
+gcry_mpi_ec_set_point (const char *name, gcry_mpi_point_t newvalue,
+                        gcry_ctx_t ctx)
+{
+  return gpg_error (_gcry_mpi_ec_set_point (name, newvalue, ctx));
+}
+
+int
+gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_point_t point,
+                        gcry_ctx_t ctx)
+{
+  return _gcry_mpi_ec_get_affine (x, y, point,
+                                  _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
+}
+
+void
+gcry_mpi_ec_dup (gcry_mpi_point_t w, gcry_mpi_point_t u, gcry_ctx_t ctx)
+{
+  _gcry_mpi_ec_dup_point (w, u, _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
+}
+
+void
+gcry_mpi_ec_add (gcry_mpi_point_t w,
+                 gcry_mpi_point_t u, gcry_mpi_point_t v, gcry_ctx_t ctx)
+{
+  _gcry_mpi_ec_add_points (w, u, v,
+                           _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
+}
+
+void
+gcry_mpi_ec_mul (gcry_mpi_point_t w, gcry_mpi_t n, gcry_mpi_point_t u,
+                 gcry_ctx_t ctx)
+{
+  _gcry_mpi_ec_mul_point (w, n, u,
+                          _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
+}
 
 unsigned int
 gcry_mpi_get_nbits (gcry_mpi_t a)
@@ -491,6 +599,20 @@ int
 gcry_mpi_get_flag (gcry_mpi_t a, enum gcry_mpi_flag flag)
 {
   return _gcry_mpi_get_flag (a, flag);
+}
+
+gcry_mpi_t
+_gcry_mpi_get_const (int no)
+{
+  switch (no)
+    {
+    case 1: return _gcry_mpi_const (MPI_C_ONE);
+    case 2: return _gcry_mpi_const (MPI_C_TWO);
+    case 3: return _gcry_mpi_const (MPI_C_THREE);
+    case 4: return _gcry_mpi_const (MPI_C_FOUR);
+    case 8: return _gcry_mpi_const (MPI_C_EIGHT);
+    default: log_bug("unsupported GCRYMPI_CONST_ macro used\n");
+    }
 }
 
 gcry_error_t
@@ -751,6 +873,17 @@ gcry_pk_get_param (int algo, const char *name)
       return NULL;
     }
   return _gcry_pk_get_param (algo, name);
+}
+
+gcry_error_t
+gcry_pubkey_get_sexp (gcry_sexp_t *r_sexp, int mode, gcry_ctx_t ctx)
+{
+  if (!fips_is_operational ())
+    {
+      *r_sexp = NULL;
+      return gpg_error (fips_not_operational ());
+    }
+  return gpg_error (_gcry_pubkey_get_sexp (r_sexp, mode, ctx));
 }
 
 gcry_error_t
@@ -1018,6 +1151,12 @@ gcry_error_t
 gcry_prime_check (gcry_mpi_t x, unsigned int flags)
 {
   return _gcry_prime_check (x, flags);
+}
+
+void
+gcry_ctx_release (gcry_ctx_t ctx)
+{
+  _gcry_ctx_release (ctx);
 }
 
 void

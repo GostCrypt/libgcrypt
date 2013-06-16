@@ -101,6 +101,8 @@ void _gcry_bug (const char *file, int line);
 void _gcry_assert_failed (const char *expr, const char *file, int line);
 #endif
 
+void _gcry_divide_by_zero (void) JNLIB_GCC_A_NR;
+
 const char *_gcry_gettext (const char *key) GCC_ATTR_FORMAT_ARG(1);
 void _gcry_fatal_error(int rc, const char *text ) JNLIB_GCC_A_NR;
 void _gcry_log( int level, const char *fmt, ... ) JNLIB_GCC_A_PRINTF(2,3);
@@ -149,6 +151,8 @@ int _gcry_log_verbosity( int level );
 #define HWF_PADLOCK_MMUL 8
 
 #define HWF_INTEL_AESNI  256
+#define HWF_INTEL_RDRAND 512
+#define HWF_INTEL_AVX    1024
 
 
 unsigned int _gcry_get_hw_features (void);
@@ -236,10 +240,51 @@ void _gcry_burn_stack (int bytes);
 #define wipememory2(_ptr,_set,_len) do { \
               volatile char *_vptr=(volatile char *)(_ptr); \
               size_t _vlen=(_len); \
-              while(_vlen) { *_vptr=(_set); _vptr++; _vlen--; } \
+              unsigned char _vset=(_set); \
+              fast_wipememory2(_vptr,_vset,_vlen); \
+              while(_vlen) { *_vptr=(_vset); _vptr++; _vlen--; } \
                   } while(0)
 #define wipememory(_ptr,_len) wipememory2(_ptr,0,_len)
 
+
+/* Optimized fast_wipememory2 for i386 and x86-64 architechtures.  Maybe leave
+   tail bytes unhandled, in which case tail bytes are handled by wipememory2.
+ */
+#if defined(__x86_64__) && __GNUC__ >= 4
+#define fast_wipememory2(_vptr,_vset,_vlen) do { \
+              unsigned long long int _vset8 = _vset; \
+              if (_vlen < 8) \
+                break; \
+              _vset8 *= 0x0101010101010101ULL; \
+              do { \
+                asm volatile("movq %[set], %[ptr]\n\t" \
+                             : /**/ \
+                             : [set] "Cr" (_vset8), \
+                               [ptr] "m" (*_vptr) \
+                             : "memory"); \
+                _vlen -= 8; \
+                _vptr += 8; \
+              } while (_vlen >= 8); \
+                  } while (0)
+#elif defined (__i386__) && SIZEOF_UNSIGNED_LONG == 4 && __GNUC__ >= 4
+#define fast_wipememory2(_ptr,_set,_len) do { \
+              unsigned long _vset4 = _vset; \
+              if (_vlen < 4) \
+                break; \
+              _vset4 *= 0x01010101; \
+              do { \
+                asm volatile("movl %[set], %[ptr]\n\t" \
+                             : /**/ \
+                             : [set] "Cr" (_vset4), \
+                               [ptr] "m" (*_vptr) \
+                             : "memory"); \
+                _vlen -= 4; \
+                _vptr += 4; \
+              } while (_vlen >= 4); \
+                  } while (0)
+#else
+#define fast_wipememory2(_ptr,_set,_len)
+#endif
 
 
 /* Digit predicates.  */
@@ -303,10 +348,7 @@ gcry_err_code_t _gcry_cipher_init (void);
 gcry_err_code_t _gcry_md_init (void);
 gcry_err_code_t _gcry_pk_init (void);
 gcry_err_code_t _gcry_secmem_module_init (void);
-
-gcry_err_code_t _gcry_pk_module_lookup (int id, gcry_module_t *module);
-void _gcry_pk_module_release (gcry_module_t module);
-gcry_err_code_t _gcry_pk_get_elements (int algo, char **enc, char **sig);
+gcry_err_code_t _gcry_mpi_init (void);
 
 /* Memory management.  */
 #define GCRY_ALLOC_FLAG_SECURE (1 << 0)
@@ -326,6 +368,8 @@ int _gcry_fips_mode (void);
 #define fips_mode() _gcry_fips_mode ()
 
 int _gcry_enforced_fips_mode (void);
+
+void _gcry_set_enforced_fips_mode (void);
 
 void _gcry_inactivate_fips_mode (const char *text);
 int _gcry_is_fips_mode_inactive (void);
@@ -350,7 +394,7 @@ void _gcry_fips_signal_error (const char *srcfile,
 
 int _gcry_fips_is_operational (void);
 #define fips_is_operational()   (_gcry_global_is_operational ())
-#define fips_not_operational()  (GCRY_GPG_ERR_NOT_OPERATIONAL)
+#define fips_not_operational()  (GPG_ERR_NOT_OPERATIONAL)
 
 int _gcry_fips_test_operational (void);
 int _gcry_fips_test_error_or_operational (void);

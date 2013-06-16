@@ -211,3 +211,28 @@ EXPORTS
       gcry_pk_get_param     @193
 
       gcry_kdf_derive       @194
+
+      gcry_mpi_snatch       @195
+
+      gcry_mpi_point_new        @196
+      gcry_mpi_point_release    @197
+      gcry_mpi_point_get        @198
+      gcry_mpi_point_snatch_get @199
+      gcry_mpi_point_set        @200
+      gcry_mpi_point_snatch_set @201
+
+      gcry_ctx_release          @202
+
+      gcry_mpi_ec_new           @203
+      gcry_mpi_ec_get_mpi       @204
+      gcry_mpi_ec_get_point     @205
+      gcry_mpi_ec_set_mpi       @206
+      gcry_mpi_ec_set_point     @207
+      gcry_mpi_ec_get_affine    @208
+      gcry_mpi_ec_dup           @209
+      gcry_mpi_ec_add           @210
+      gcry_mpi_ec_mul           @211
+
+      gcry_pubkey_get_sexp      @212
+
+      _gcry_mpi_get_const       @213

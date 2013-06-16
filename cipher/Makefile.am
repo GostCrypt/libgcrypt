@@ -26,10 +26,13 @@ EXTRA_DIST = Manifest
 AM_CPPFLAGS = -I../src -I$(top_srcdir)/src
 AM_CFLAGS = $(GPG_ERROR_CFLAGS)
 
+AM_CCASFLAGS = $(NOEXECSTACK_FLAGS)
+
 
 noinst_LTLIBRARIES = libcipher.la
 
-GCRYPT_MODULES = @GCRYPT_CIPHERS@ @GCRYPT_PUBKEY_CIPHERS@ @GCRYPT_DIGESTS@
+GCRYPT_MODULES = @GCRYPT_CIPHERS@ @GCRYPT_PUBKEY_CIPHERS@ \
+                 @GCRYPT_DIGESTS@ @GCRYPT_KDFS@
 
 libcipher_la_DEPENDENCIES = $(GCRYPT_MODULES)
 libcipher_la_LIBADD = $(GCRYPT_MODULES)
@@ -37,18 +40,22 @@ libcipher_la_LIBADD = $(GCRYPT_MODULES)
 libcipher_la_SOURCES = \
 cipher.c cipher-internal.h \
 cipher-cbc.c cipher-cfb.c cipher-ofb.c cipher-ctr.c cipher-aeswrap.c \
-cipher-ofbgost.c \
-pubkey.c md.c kdf.c \
+cipher-ofbgost.c cipher-selftest.c cipher-selftest.h \
+pubkey.c pubkey-internal.h \
+md.c \
+kdf.c kdf-internal.h \
 hmac-tests.c \
 bithelp.h  \
+bufhelp.h  \
 primegen.c  \
 hash-common.c hash-common.h \
+dsa-common.c \
 rmd.h
 
 EXTRA_libcipher_la_SOURCES = \
 arcfour.c \
 blowfish.c \
-cast5.c \
+cast5.c cast5-amd64.S \
 crc.c \
 des.c \
 dsa.c \
@@ -62,8 +69,9 @@ md5.c \
 rijndael.c rijndael-tables.h \
 rmd160.c \
 rsa.c \
+scrypt.c \
 seed.c \
-serpent.c \
+serpent.c serpent-sse2-amd64.S \
 sha1.c \
 sha256.c \
 sha512.c \
@@ -71,10 +79,10 @@ tiger.c \
 whirlpool.c \
 twofish.c \
 rfc2268.c \
-camellia.c camellia.h camellia-glue.c
+camellia.c camellia.h camellia-glue.c camellia-aesni-avx-amd64.S
 
 if ENABLE_O_FLAG_MUNGING
-o_flag_munging = sed -e 's/-O[2-9s]*/-O1/g'
+o_flag_munging = sed -e 's/-O\([2-9s][2-9s]*\)/-O1/' -e 's/-Ofast/-O1/g'
 else
 o_flag_munging = cat
 endif

@@ -1,5 +1,5 @@
 /* random.c - Random number switch
- * Copyright (C) 2008  Free Software Foundation, Inc.
+ * Copyright (C) 2003, 2006, 2008, 2012  Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -26,10 +26,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "g10lib.h"
 #include "random.h"
 #include "rand-internal.h"
+#include "cipher.h"         /* For _gcry_sha1_hash_buffer().  */
 #include "ath.h"
 
 
@@ -39,6 +43,18 @@
 static void (*progress_cb) (void *,const char*,int,int, int );
 static void *progress_cb_data;
 
+/* Flags indicating the requested RNG types.  */
+static struct
+{
+  int standard;
+  int fips;
+  int system;
+} rng_types;
+
+
+/* This is the lock we use to protect the buffer used by the nonce
+   generation.  */
+static ath_mutex_t nonce_buffer_lock;
 
 
 
@@ -66,6 +82,55 @@ _gcry_random_progress (const char *what, int printchar, int current, int total)
 }
 
 
+/* Set the preferred RNG type.  This may be called at any time even
+   before gcry_check_version.  Thus we can't assume any thread system
+   initialization.  A type of 0 is used to indicate that any Libgcrypt
+   initialization has been done.*/
+void
+_gcry_set_preferred_rng_type (int type)
+{
+  static int any_init;
+
+  if (!type)
+    {
+      any_init = 1;
+    }
+  else if (type == GCRY_RNG_TYPE_STANDARD)
+    {
+      rng_types.standard = 1;
+    }
+  else if (any_init)
+    {
+      /* After any initialization has been done we only allow to
+         upgrade to the standard RNG (handled above).  All other
+         requests are ignored.  The idea is that the application needs
+         to declare a preference for a weaker RNG as soon as possible
+         and before any library sets a preference.  We assume that a
+         library which uses Libgcrypt calls an init function very
+         early.  This way --- even if the library gets initialized
+         early by the application --- it is unlikely that it can
+         select a lower priority RNG.
+
+         This scheme helps to ensure that existing unmodified
+         applications (e.g. gpg2), which don't known about the new RNG
+         selection system, will continue to use the standard RNG and
+         not be tricked by some library to use a lower priority RNG.
+         There are some loopholes here but at least most GnuPG stuff
+         should be save because it calls src_c{gcry_control
+         (GCRYCTL_SUSPEND_SECMEM_WARN);} quite early and thus inhibits
+         switching to a low priority RNG.
+       */
+    }
+  else if (type == GCRY_RNG_TYPE_FIPS)
+    {
+      rng_types.fips = 1;
+    }
+  else if (type == GCRY_RNG_TYPE_SYSTEM)
+    {
+      rng_types.system = 1;
+    }
+}
+
 
 /* Initialize this random subsystem.  If FULL is false, this function
    merely calls the basic initialization of the module and does not do
@@ -75,10 +140,50 @@ _gcry_random_progress (const char *what, int printchar, int current, int total)
 void
 _gcry_random_initialize (int full)
 {
+  static int nonce_initialized;
+  int err;
+
+  if (!nonce_initialized)
+    {
+      nonce_initialized = 1;
+      err = ath_mutex_init (&nonce_buffer_lock);
+      if (err)
+        log_fatal ("failed to create the nonce buffer lock: %s\n",
+                   strerror (err) );
+    }
+
   if (fips_mode ())
     _gcry_rngfips_initialize (full);
+  else if (rng_types.standard)
+    _gcry_rngcsprng_initialize (full);
+  else if (rng_types.fips)
+    _gcry_rngfips_initialize (full);
+  else if (rng_types.system)
+    _gcry_rngsystem_initialize (full);
   else
     _gcry_rngcsprng_initialize (full);
+}
+
+
+/* Return the current RNG type.  IGNORE_FIPS_MODE is a flag used to
+   skip the test for FIPS.  This is useful, so that we are able to
+   return the type of the RNG even before we have setup FIPS mode
+   (note that FIPS mode is enabled by default until it is switched off
+   by the initialization).  This is mostly useful for the regression
+   test.  */
+int
+_gcry_get_rng_type (int ignore_fips_mode)
+{
+  if (!ignore_fips_mode && fips_mode ())
+    return GCRY_RNG_TYPE_FIPS;
+  else if (rng_types.standard)
+    return GCRY_RNG_TYPE_STANDARD;
+  else if (rng_types.fips)
+    return GCRY_RNG_TYPE_FIPS;
+  else if (rng_types.system)
+    return GCRY_RNG_TYPE_SYSTEM;
+  else
+    return GCRY_RNG_TYPE_STANDARD;
 }
 
 
@@ -159,7 +264,13 @@ gcry_random_add_bytes (const void *buf, size_t buflen, int quality)
 {
   if (fips_mode ())
     return 0; /* No need for this in fips mode.  */
-  else
+  else if (rng_types.standard)
+    return _gcry_rngcsprng_add_bytes (buf, buflen, quality);
+  else if (rng_types.fips)
+    return 0;
+  else if (rng_types.system)
+    return 0;
+  else /* default */
     return _gcry_rngcsprng_add_bytes (buf, buflen, quality);
 }
 
@@ -170,7 +281,13 @@ do_randomize (void *buffer, size_t length, enum gcry_random_level level)
 {
   if (fips_mode ())
     _gcry_rngfips_randomize (buffer, length, level);
-  else
+  else if (rng_types.standard)
+    _gcry_rngcsprng_randomize (buffer, length, level);
+  else if (rng_types.fips)
+    _gcry_rngfips_randomize (buffer, length, level);
+  else if (rng_types.system)
+    _gcry_rngsystem_randomize (buffer, length, level);
+  else /* default */
     _gcry_rngcsprng_randomize (buffer, length, level);
 }
 
@@ -225,7 +342,13 @@ _gcry_set_random_seed_file (const char *name)
 {
   if (fips_mode ())
     ; /* No need for this in fips mode.  */
-  else
+  else if (rng_types.standard)
+    _gcry_rngcsprng_set_seed_file (name);
+  else if (rng_types.fips)
+    ;
+  else if (rng_types.system)
+    ;
+  else /* default */
     _gcry_rngcsprng_set_seed_file (name);
 }
 
@@ -237,7 +360,13 @@ _gcry_update_random_seed_file (void)
 {
   if (fips_mode ())
     ; /* No need for this in fips mode.  */
-  else
+  else if (rng_types.standard)
+    _gcry_rngcsprng_update_seed_file ();
+  else if (rng_types.fips)
+    ;
+  else if (rng_types.system)
+    ;
+  else /* default */
     _gcry_rngcsprng_update_seed_file ();
 }
 
@@ -255,7 +384,13 @@ _gcry_fast_random_poll (void)
 {
   if (fips_mode ())
     ; /* No need for this in fips mode.  */
-  else
+  else if (rng_types.standard)
+    _gcry_rngcsprng_fast_poll ();
+  else if (rng_types.fips)
+    ;
+  else if (rng_types.system)
+    ;
+  else /* default */
     _gcry_rngcsprng_fast_poll ();
 }
 
@@ -265,10 +400,90 @@ _gcry_fast_random_poll (void)
 void
 gcry_create_nonce (void *buffer, size_t length)
 {
+  static unsigned char nonce_buffer[20+8];
+  static int nonce_buffer_initialized = 0;
+  static volatile pid_t my_pid; /* The volatile is there to make sure the
+                                   compiler does not optimize the code away
+                                   in case the getpid function is badly
+                                   attributed. */
+  volatile pid_t apid;
+  unsigned char *p;
+  size_t n;
+  int err;
+
+  /* First check whether we shall use the FIPS nonce generator.  This
+     is only done in FIPS mode, in all other modes, we use our own
+     nonce generator which is seeded by the RNG actual in use.  */
   if (fips_mode ())
-    _gcry_rngfips_create_nonce (buffer, length);
-  else
-    _gcry_rngcsprng_create_nonce (buffer, length);
+    {
+      _gcry_rngfips_create_nonce (buffer, length);
+      return;
+    }
+
+  /* This is the nonce generator, which formerly lived in
+     random-csprng.c.  It is now used by all RNG types except when in
+     FIPS mode (not that this means it is also used if the FIPS RNG
+     has been selected but we are not in fips mode).  */
+
+  /* Make sure we are initialized. */
+  _gcry_random_initialize (1);
+
+  /* Acquire the nonce buffer lock. */
+  err = ath_mutex_lock (&nonce_buffer_lock);
+  if (err)
+    log_fatal ("failed to acquire the nonce buffer lock: %s\n",
+               strerror (err));
+
+  apid = getpid ();
+  /* The first time initialize our buffer. */
+  if (!nonce_buffer_initialized)
+    {
+      time_t atime = time (NULL);
+      pid_t xpid = apid;
+
+      my_pid = apid;
+
+      if ((sizeof apid + sizeof atime) > sizeof nonce_buffer)
+        BUG ();
+
+      /* Initialize the first 20 bytes with a reasonable value so that
+         a failure of gcry_randomize won't affect us too much.  Don't
+         care about the uninitialized remaining bytes. */
+      p = nonce_buffer;
+      memcpy (p, &xpid, sizeof xpid);
+      p += sizeof xpid;
+      memcpy (p, &atime, sizeof atime);
+
+      /* Initialize the never changing private part of 64 bits. */
+      gcry_randomize (nonce_buffer+20, 8, GCRY_WEAK_RANDOM);
+
+      nonce_buffer_initialized = 1;
+    }
+  else if ( my_pid != apid )
+    {
+      /* We forked. Need to reseed the buffer - doing this for the
+         private part should be sufficient. */
+      do_randomize (nonce_buffer+20, 8, GCRY_WEAK_RANDOM);
+      /* Update the pid so that we won't run into here again and
+         again. */
+      my_pid = apid;
+    }
+
+  /* Create the nonce by hashing the entire buffer, returning the hash
+     and updating the first 20 bytes of the buffer with this hash. */
+  for (p = buffer; length > 0; length -= n, p += n)
+    {
+      _gcry_sha1_hash_buffer (nonce_buffer,
+                              nonce_buffer, sizeof nonce_buffer);
+      n = length > 20? 20 : length;
+      memcpy (p, nonce_buffer, n);
+    }
+
+  /* Release the nonce buffer lock. */
+  err = ath_mutex_unlock (&nonce_buffer_lock);
+  if (err)
+    log_fatal ("failed to release the nonce buffer lock: %s\n",
+               strerror (err));
 }
 
 

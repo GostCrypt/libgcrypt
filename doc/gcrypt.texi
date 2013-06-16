@@ -12,7 +12,9 @@ This manual is for Libgcrypt
 (version @value{VERSION}, @value{UPDATED}),
 which is GNU's library of cryptographic building blocks.
 
-Copyright @copyright{} 2000, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2011 Free Software Foundation, Inc.
+@noindent
+Copyright @copyright{} 2000, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2011, 2012 Free Software Foundation, Inc. @*
+Copyright @copyright{} 2012, 2013 g10 Code GmbH
 
 @quotation
 Permission is granted to copy, distribute and/or modify this document
@@ -90,7 +92,7 @@ section entitled ``GNU General Public License''.
 * S-expressions::                How to manage S-expressions.
 * MPI library::                  How to work with multi-precision-integers.
 * Prime numbers::                How to use the Prime number related functions.
-* Utilities::                    Utility functions.
+* Utilities::                   Utility functions.
 * Tools::                        Utility tools
 * Architecture::                 How Libgcrypt works internally.
 
@@ -595,8 +597,10 @@ initialization (i.e. before @code{gcry_check_version}).
 
 In addition to the standard FIPS mode, Libgcrypt may also be put into
 an Enforced FIPS mode by writing a non-zero value into the file
-@file{/etc/gcrypt/fips_enabled}.  The Enforced FIPS mode helps to
-detect applications which don't fulfill all requirements for using
+@file{/etc/gcrypt/fips_enabled} or by using the control command
+@code{GCRYCTL_SET_ENFORCED_FIPS_FLAG} before any other calls to
+libgcrypt.  The Enforced FIPS mode helps to detect applications
+which don't fulfill all requirements for using
 Libgcrypt in FIPS mode (@pxref{FIPS Mode}).
 
 Once Libgcrypt has been put into FIPS mode, it is not possible to
@@ -674,6 +678,24 @@ mode this command has no effect at all.
 Many applications do not require secure memory, so they should disable
 it right away.  This command should be executed right after
 @code{gcry_check_version}.
+
+@item GCRYCTL_DISABLE_LOCKED_SECMEM; Arguments: none
+This command disables the use of the mlock call for secure memory.
+Disabling the use of mlock may for example be done if an encrypted
+swap space is in use.  This command should be executed right after
+@code{gcry_check_version}.
+
+@item GCRYCTL_DISABLE_PRIV_DROP; Arguments: none
+This command sets a global flag to tell the secure memory subsystem
+that it shall not drop privileges after secure memory has been
+allocated.  This command is commonly used right after
+@code{gcry_check_version} but may also be used right away at program
+startup.  It won't have an effect after the secure memory pool has
+been initialized.  WARNING: A process running setuid(root) is a severe
+security risk.  Processes making use of Libgcrypt or other complex
+code should drop these extra privileges as soon as possible.  If this
+command has been used the caller is responsible for dropping the
+privileges.
 
 @item GCRYCTL_INIT_SECMEM; Arguments: int nbytes
 This command is used to allocate a pool of secure memory and thus
@@ -804,20 +826,20 @@ proper random device.
 This command dumps information pertaining to the configuration of the
 library to the given stream.  If NULL is given for @var{stream}, the log
 system is used.  This command may be used before the intialization has
-been finished but not before a gcry_version_check.
+been finished but not before a @code{gcry_check_version}.
 
 @item GCRYCTL_OPERATIONAL_P; Arguments: none
 This command returns true if the library is in an operational state.
 This information makes only sense in FIPS mode.  In contrast to other
 functions, this is a pure test function and won't put the library into
 FIPS mode or change the internal state.  This command may be used before
-the intialization has been finished but not before a gcry_version_check.
+the intialization has been finished but not before a @code{gcry_check_version}.
 
 @item GCRYCTL_FIPS_MODE_P; Arguments: none
 This command returns true if the library is in FIPS mode.  Note, that
 this is no indication about the current state of the library.  This
 command may be used before the intialization has been finished but not
-before a gcry_version_check.  An application may use this command or
+before a @code{gcry_check_version}.  An application may use this command or
 the convenience macro below to check whether FIPS mode is actually
 active.
 
@@ -833,9 +855,49 @@ implemented as a macro.
 Running this command puts the library into FIPS mode.  If the library is
 already in FIPS mode, a self-test is triggered and thus the library will
 be put into operational state.  This command may be used before a call
-to gcry_check_version and that is actually the recommended way to let an
+to @code{gcry_check_version} and that is actually the recommended way to let an
 application switch the library into FIPS mode.  Note that Libgcrypt will
 reject an attempt to switch to fips mode during or after the intialization.
+
+@item GCRYCTL_SET_ENFORCED_FIPS_FLAG; Arguments: none
+Running this command sets the internal flag that puts the library into
+the enforced FIPS mode during the FIPS mode initialization.  This command
+does not affect the library if the library is not put into the FIPS mode and
+it must be used before any other libgcrypt library calls that initialize
+the library such as @code{gcry_check_version}. Note that Libgcrypt will
+reject an attempt to switch to the enforced fips mode during or after
+the intialization.
+
+@item GCRYCTL_SET_PREFERRED_RNG_TYPE; Arguments: int
+These are advisory commands to select a certain random number
+generator.  They are only advisory because libraries may not know what
+an application actually wants or vice versa.  Thus Libgcrypt employs a
+priority check to select the actually used RNG.  If an applications
+selects a lower priority RNG but a library requests a higher priority
+RNG Libgcrypt will switch to the higher priority RNG.  Applications
+and libaries should use these control codes before
+@code{gcry_check_version}.  The available generators are:
+@table @code
+@item GCRY_RNG_TYPE_STANDARD
+A conservative standard generator based on the ``Continuously Seeded
+Pseudo Random Number Generator'' designed by Peter Gutmann.
+@item GCRY_RNG_TYPE_FIPS
+A deterministic random number generator conforming to he document
+``NIST-Recommended Random Number Generator Based on ANSI X9.31
+Appendix A.2.4 Using the 3-Key Triple DES and AES Algorithms''
+(2005-01-31).  This implementation uses the AES variant.
+@item GCRY_RNG_TYPE_SYSTEM
+A wrapper around the system's native RNG.  On Unix system these are
+usually the /dev/random and /dev/urandom devices.
+@end table
+The default is @code{GCRY_RNG_TYPE_STANDARD} unless FIPS mode as been
+enabled; in which case @code{GCRY_RNG_TYPE_FIPS} is used and locked
+against further changes.
+
+@item GCRYCTL_GETT_CURRENT_RNG_TYPE; Arguments: int *
+This command stores the type of the currently used RNG as an integer
+value at the provided address.
+
 
 @item GCRYCTL_SELFTEST; Arguments: none
 This may be used at anytime to have the library run all implemented
@@ -2028,6 +2090,7 @@ and no @var{x-mpi}.
 @node ECC key parameters
 @subsection ECC key parameters
 
+@anchor{ecc_keyparam}
 @noindent
 An ECC private key is described by this S-expression:
 
@@ -2054,7 +2117,7 @@ Base point @math{g}.
 @item n-mpi
 Order of @math{g}
 @item q-point
-The point representing the public key @math{Q = dP}.
+The point representing the public key @math{Q = dG}.
 @item d-mpi
 The private key @math{d}
 @end table
@@ -2077,7 +2140,8 @@ used.  For example
     (d @var{d-mpi})))
 @end example
 
-The @code{curve} parameter may be given in any case and is used to replace
+Note that @var{q-point} is optional for a private key.  The
+@code{curve} parameter may be given in any case and is used to replace
 missing parameters.
 
 @noindent
@@ -2328,7 +2392,8 @@ S-expression returned is:
 Where @var{r-mpi} and @var{s-mpi} are the result of the DSA sign
 operation.  For Elgamal signing (which is slow, yields large numbers
 and probably is not as secure as the other algorithms), the same format is
-used with "elg" replacing "dsa".
+used with "elg" replacing "dsa"; for ECDSA signing, the same format is used
+with "ecdsa" replacing "dsa".
 @end deftypefun
 @c end gcry_pk_sign
 
@@ -2688,6 +2753,50 @@ a very useful information and only available if the key generation
 algorithm provides them.
 @end deftypefun
 @c end gcry_pk_genkey
+
+
+@noindent
+Future versions of Libgcrypt will have extended versions of the public
+key interfaced which will take an additional context to allow for
+pre-computations, special operations, and other optimization.  As a
+first step a new function is introduced to help using the ECC
+algorithms in new ways:
+
+@deftypefun gcry_error_t gcry_pubkey_get_sexp (@w{gcry_sexp_t *@var{r_sexp}}, @
+ @w{int @var{mode}}, @w{gcry_ctx_t @var{ctx}})
+
+Return an S-expression representing the context @var{ctx}.  Depending
+on the state of that context, the S-expression may either be a public
+key, a private key or any other object used with public key
+operations.  On success 0 is returned and a new S-expression is stored
+at @var{r_sexp}; on error an error code is returned and NULL is stored
+at @var{r_sexp}.  @var{mode} must be one of:
+
+@table @code
+@item 0
+Decide what to return depending on the context.  For example if the
+private key parameter is available a private key is returned, if not a
+public key is returned.
+
+@item GCRY_PK_GET_PUBKEY
+Return the public key even if the context has the private key
+parameter.
+
+@item GCRY_PK_GET_SECKEY
+Return the private key or the error @code{GPG_ERR_NO_SECKEY} if it is
+not possible.
+@end table
+
+As of now this function supports only certain ECC operations because a
+context object is right now only defined for ECC.  Over time this
+function will be extended to cover more algorithms.
+
+@end deftypefun
+@c end gcry_pubkey_get_sexp
+
+
+
+
 
 @c **********************************************************
 @c *******************  Hash Functions  *********************
@@ -3144,6 +3253,12 @@ iteration count.
 @item GCRY_KDF_PBKDF2
 The PKCS#5 Passphrase Based Key Derivation Function number 2.
 
+@item GCRY_KDF_SCRYPT
+The SCRYPT Key Derivation Function.  The subalgorithm is used to specify
+the CPU/memory cost parameter N, and the number of iterations
+is used for the parallelization parameter p.  The block size is fixed
+at 8 in the current implementation.
+
 @end table
 @end deftypefun
 
@@ -3498,6 +3613,7 @@ likely want to use @code{GCRYMPI_FMT_USG}.
 * Calculations::                Performing MPI calculations.
 * Comparisons::                 How to compare MPI values.
 * Bit manipulations::           How to access single bits of MPI values.
+* EC functions::                Elliptic curve related functions.
 * Miscellaneous::               Miscellaneous MPI functions.
 @end menu
 
@@ -3513,6 +3629,10 @@ numbers are called MPIs (multi-precision-integers).
 
 @deftp {Data type} {gcry_mpi_t}
 This type represents an object to hold an MPI.
+@end deftp
+
+@deftp {Data type} {gcry_mpi_point_t}
+This type represents an object to hold a point for elliptic curve math.
 @end deftp
 
 @node Basic functions
@@ -3540,7 +3660,8 @@ confidential data like private key parameters.
 
 @deftypefun gcry_mpi_t gcry_mpi_copy (@w{const gcry_mpi_t @var{a}})
 
-Create a new MPI as the exact copy of @var{a}.
+Create a new MPI as the exact copy of @var{a} but with the constant
+and immutable flags cleared.
 @end deftypefun
 
 
@@ -3573,6 +3694,13 @@ small values (usually up to the word size of the CPU).
 @deftypefun void gcry_mpi_swap (@w{gcry_mpi_t @var{a}}, @w{gcry_mpi_t @var{b}})
 
 Swap the values of @var{a} and @var{b}.
+@end deftypefun
+
+@deftypefun void gcry_mpi_snatch (@w{gcry_mpi_t @var{w}}, @
+                                  @w{const gcry_mpi_t @var{u}})
+
+Set @var{u} into @var{w} and release @var{u}.  If @var{w} is
+@code{NULL} only @var{u} will be released.
 @end deftypefun
 
 @node MPI formats
@@ -3811,8 +3939,194 @@ Shift the value of @var{a} by @var{n} bits to the left and store the
 result in @var{x}.
 @end deftypefun
 
+@node EC functions
+@section EC functions
+
+@noindent
+Libgcrypt provides an API to access low level functions used by its
+elliptic curve implementation.  These functions allow to implement
+elliptic curve methods for which no explicit support is available.
+
+@deftypefun gcry_mpi_point_t gcry_mpi_point_new (@w{unsigned int @var{nbits}})
+
+Allocate a new point object, initialize it to 0, and allocate enough
+memory for a points of at least @var{nbits}.  This pre-allocation
+yields only a small performance win and is not really necessary
+because Libgcrypt automatically re-allocates the required memory.
+Using 0 for @var{nbits} is usually the right thing to do.
+@end deftypefun
+
+@deftypefun void gcry_mpi_point_release (@w{gcry_mpi_point_t @var{point}})
+
+Release @var{point} and free all associated resources.  Passing
+@code{NULL} is allowed and ignored.
+@end deftypefun
+
+@deftypefun void gcry_mpi_point_get (@w{gcry_mpi_t @var{x}}, @
+ @w{gcry_mpi_t @var{y}}, @w{gcry_mpi_t @var{z}}, @
+ @w{gcry_mpi_point_t @var{point}})
+
+Store the projective coordinates from @var{point} into the MPIs
+@var{x}, @var{y}, and @var{z}.  If a coordinate is not required,
+@code{NULL} may be used for @var{x}, @var{y}, or @var{z}.
+@end deftypefun
+
+@deftypefun void gcry_mpi_point_snatch_get (@w{gcry_mpi_t @var{x}}, @
+ @w{gcry_mpi_t @var{y}}, @w{gcry_mpi_t @var{z}}, @
+ @w{gcry_mpi_point_t @var{point}})
+
+Store the projective coordinates from @var{point} into the MPIs
+@var{x}, @var{y}, and @var{z}.  If a coordinate is not required,
+@code{NULL} may be used for @var{x}, @var{y}, or @var{z}.  The object
+@var{point} is then released.  Using this function instead of
+@code{gcry_mpi_point_get} and @code{gcry_mpi_point_release} has the
+advantage of avoiding some extra memory allocations and copies.
+@end deftypefun
+
+@deftypefun gcry_mpi_point_t gcry_mpi_point_set ( @
+ @w{gcry_mpi_point_t @var{point}}, @
+ @w{gcry_mpi_t @var{x}}, @w{gcry_mpi_t @var{y}}, @w{gcry_mpi_t @var{z}})
+
+Store the projective coordinates from @var{x}, @var{y}, and @var{z}
+into @var{point}.  If a coordinate is given as @code{NULL}, the value
+0 is used.  If @code{NULL} is used for @var{point} a new point object
+is allocated and returned.  Returns @var{point} or the newly allocated
+point object.
+@end deftypefun
+
+@deftypefun gcry_mpi_point_t gcry_mpi_point_snatch_set ( @
+ @w{gcry_mpi_point_t @var{point}}, @
+ @w{gcry_mpi_t @var{x}}, @w{gcry_mpi_t @var{y}}, @w{gcry_mpi_t @var{z}})
+
+Store the projective coordinates from @var{x}, @var{y}, and @var{z}
+into @var{point}.  If a coordinate is given as @code{NULL}, the value
+0 is used.  If @code{NULL} is used for @var{point} a new point object
+is allocated and returned.  The MPIs @var{x}, @var{y}, and @var{z} are
+released.  Using this function instead of @code{gcry_mpi_point_set}
+and 3 calls to @code{gcry_mpi_release} has the advantage of avoiding
+some extra memory allocations and copies.  Returns @var{point} or the
+newly allocated point object.
+@end deftypefun
+
+@anchor{gcry_mpi_ec_new}
+@deftypefun gpg_error_t gcry_mpi_ec_p_new (@w{gpg_ctx_t *@var{r_ctx}}, @
+ @w{gcry_sexp_t @var{keyparam}}, @w{const char *@var{curvename}})
+
+Allocate a new context for elliptic curve operations.  If
+@var{keyparam} is given it specifies the parameters of the curve
+(@pxref{ecc_keyparam}).  If @var{curvename} is given in addition to
+@var{keyparam} and the key parameters do not include a named curve
+reference, the string @var{curvename} is used to fill in missing
+parameters.  If only @var{curvename} is given, the context is
+initialized for this named curve.
+
+If a parameter specifying a point (e.g. @code{g} or @code{q}) is not
+found, the parser looks for a non-encoded point by appending
+@code{.x}, @code{.y}, and @code{.z} to the parameter name and looking
+them all up to create a point.  A parameter with the suffix @code{.z}
+is optional and defaults to 1.
+
+On success the function returns 0 and stores the new context object at
+@var{r_ctx}; this object eventually needs to be released
+(@pxref{gcry_ctx_release}).  On error the function stores @code{NULL} at
+@var{r_ctx} and returns an error code.
+@end deftypefun
+
+@deftypefun gcry_mpi_t gcry_mpi_ec_get_mpi ( @
+ @w{const char *@var{name}}, @w{gcry_ctx_t @var{ctx}}, @w{int @var{copy}})
+
+Return the MPI with @var{name} from the context @var{ctx}.  If not
+found @code{NULL} is returned.  If the returned MPI may later be
+modified, it is suggested to pass @code{1} to @var{copy}, so that the
+function guarantees that a modifiable copy of the MPI is returned.  If
+@code{0} is used for @var{copy}, this function may return a constant
+flagged MPI.  In any case @code{gcry_mpi_release} needs to be called
+to release the result.  For valid names @ref{ecc_keyparam}.  If a
+point parameter is requested it is returned as an uncompressed encoded
+point.  If the public key @code{q} is requested but only the private
+key @code{d} is available, @code{q} will be recomputed on the fly.
+@end deftypefun
+
+@deftypefun gcry_mpi_point_t gcry_mpi_ec_get_point ( @
+ @w{const char *@var{name}}, @w{gcry_ctx_t @var{ctx}}, @w{int @var{copy}})
+
+Return the point with @var{name} from the context @var{ctx}.  If not
+found @code{NULL} is returned.  If the returned MPI may later be
+modified, it is suggested to pass @code{1} to @var{copy}, so that the
+function guarantees that a modifiable copy of the MPI is returned.  If
+@code{0} is used for @var{copy}, this function may return a constant
+flagged point.  In any case @code{gcry_mpi_point_release} needs to be
+called to release the result.  If the public key @code{q} is requested
+but only the private key @code{d} is available, @code{q} will be
+recomputed on the fly.
+@end deftypefun
+
+@deftypefun gpg_error_t gcry_mpi_ec_set_mpi ( @
+ @w{const char *@var{name}}, @w{gcry_mpi_t @var{newvalue}}, @
+ @w{gcry_ctx_t @var{ctx}})
+
+Store the MPI @var{newvalue} at @var{name} into the context @var{ctx}.
+On success @code{0} is returned; on error an error code.  Valid names
+are the MPI parameters of an elliptic curve (@pxref{ecc_keyparam}).
+@end deftypefun
+
+@deftypefun gpg_error_t gcry_mpi_ec_set_point ( @
+ @w{const char *@var{name}}, @w{gcry_mpi_point_t @var{newvalue}}, @
+ @w{gcry_ctx_t @var{ctx}})
+
+Store the point @var{newvalue} at @var{name} into the context
+@var{ctx}.  On success @code{0} is returned; on error an error code.
+Valid names are the point parameters of an elliptic curve
+(@pxref{ecc_keyparam}).
+@end deftypefun
+
+@deftypefun int gcry_mpi_ec_get_affine ( @
+ @w{gcry_mpi_t @var{x}}, @w{gcry_mpi_t @var{y}}, @
+ @w{gcry_mpi_point_t @var{point}}, @w{gcry_ctx_t @var{ctx}})
+
+Compute the affine coordinates from the projective coordinates in
+@var{point} and store them into @var{x} and @var{y}.  If one
+coordinate is not required, @code{NULL} may be passed to @var{x} or
+@var{y}.  @var{ctx} is the context object which has been created using
+@code{gcry_mpi_ec_new}. Returns 0 on success or not 0 if @var{point}
+is at infinity.
+
+Note that you can use @code{gcry_mpi_ec_set_point} with the value
+@code{GCRYMPI_CONST_ONE} for @var{z} to convert affine coordinates
+back into projective coordinates.
+
+@end deftypefun
+
+@deftypefun void gcry_mpi_ec_dup ( @
+ @w{gcry_mpi_point_t @var{w}}, @w{gcry_mpi_point_t @var{u}}, @
+ @w{gcry_ctx_t @var{ctx}})
+
+Double the point @var{u} of the elliptic curve described by @var{ctx}
+and store the result into @var{w}.
+@end deftypefun
+
+@deftypefun void gcry_mpi_ec_add ( @
+ @w{gcry_mpi_point_t @var{w}}, @w{gcry_mpi_point_t @var{u}}, @
+ @w{gcry_mpi_point_t @var{v}}, @w{gcry_ctx_t @var{ctx}})
+
+Add the points @var{u} and @var{v} of the elliptic curve described by
+@var{ctx} and store the result into @var{w}.
+@end deftypefun
+
+@deftypefun void gcry_mpi_ec_mul ( @
+ @w{gcry_mpi_point_t @var{w}}, @w{gcry_mpi_t @var{n}}, @
+ @w{gcry_mpi_point_t @var{u}}, @w{gcry_ctx_t @var{ctx}})
+
+Multiply the point @var{u} of the elliptic curve described by
+@var{ctx} by @var{n} and store the result into @var{w}.
+@end deftypefun
+
+
 @node Miscellaneous
 @section Miscellaneous
+
+An MPI data type is allowed to be ``misused'' to store an arbitrary
+value.  Two functions implement this kludge:
 
 @deftypefun gcry_mpi_t gcry_mpi_set_opaque (@w{gcry_mpi_t @var{a}}, @w{void *@var{p}}, @w{unsigned int @var{nbits}})
 
@@ -3824,7 +4138,6 @@ math calculation and is only used to store an arbitrary bit pattern in
 WARNING: Never use an opaque MPI for actual math operations.  The only
 valid functions are gcry_mpi_get_opaque and gcry_mpi_release.  Use
 gcry_mpi_scan to convert a string of arbitrary bytes into an MPI.
-
 @end deftypefun
 
 @deftypefun {void *} gcry_mpi_get_opaque (@w{gcry_mpi_t @var{a}}, @w{unsigned int *@var{nbits}})
@@ -3835,23 +4148,59 @@ size in @var{nbits}.  Note that the returned pointer is still owned by
 MPI.
 @end deftypefun
 
-@deftypefun void gcry_mpi_set_flag (@w{gcry_mpi_t @var{a}}, @w{enum gcry_mpi_flag @var{flag}})
+Each MPI has an associated set of flags for special purposes.  The
+currently defined flags are:
 
-Set the @var{flag} for the MPI @var{a}.  Currently only the flag
-@code{GCRYMPI_FLAG_SECURE} is allowed to convert @var{a} into an MPI
-stored in "secure memory".
+@table @code
+@item GCRYMPI_FLAG_SECURE
+Setting this flag converts @var{a} into an MPI stored in "secure
+memory".  Clearing this flag is not allowed.
+@item GCRYMPI_FLAG_OPAQUE
+This is an interanl flag, indicating the an opaque valuue and not an
+integer is stored.  This is an read-only flag; it may not be set or
+cleared.
+@item GCRYMPI_FLAG_IMMUTABLE
+If this flag is set, the MPI is marked as immutable.  Setting or
+changing the value of that MPI is ignored and an error message is
+logged.  The flag is sometimes useful for debugging.
+@item GCRYMPI_FLAG_CONST
+If this flag is set, the MPI is marked as a constant and as immutable
+Setting or changing the value of that MPI is ignored and an error
+message is logged.  Such an MPI will never be deallocated and may thus
+be used without copying.  Note that using gcry_mpi_copy will return a
+copy of that constant with this and the immutable flag cleared.  A few
+commonly used constants are pre-defined and accessible using the
+macros @code{GCRYMPI_CONST_ONE}, @code{GCRYMPI_CONST_TWO},
+@code{GCRYMPI_CONST_THREE}, @code{GCRYMPI_CONST_FOUR}, and
+@code{GCRYMPI_CONST_EIGHT}.
+@end table
+
+@deftypefun void gcry_mpi_set_flag (@w{gcry_mpi_t @var{a}}, @
+ @w{enum gcry_mpi_flag @var{flag}})
+
+Set the @var{flag} for the MPI @var{a}.  The only allowed flags are
+@code{GCRYMPI_FLAG_SECURE}, @code{GCRYMPI_FLAG_IMMUTABLE}, and
+@code{GCRYMPI_FLAG_CONST}.
 @end deftypefun
 
-@deftypefun void gcry_mpi_clear_flag (@w{gcry_mpi_t @var{a}}, @w{enum gcry_mpi_flag @var{flag}})
+@deftypefun void gcry_mpi_clear_flag (@w{gcry_mpi_t @var{a}}, @
+ @w{enum gcry_mpi_flag @var{flag}})
 
-Clear @var{flag} for the multi-precision-integers @var{a}.  Note that
-this function is currently useless as no flags are allowed.
+Clear @var{flag} for the multi-precision-integers @var{a}.  The only
+allowed flag is @code{GCRYMPI_FLAG_IMMUTABLE} but only if
+@code{GCRYMPI_FLAG_CONST} is not set.  If @code{GCRYMPI_FLAG_CONST} is
+set, clearing @code{GCRYMPI_FLAG_IMMUTABLE} will simply be ignored.
+@end deftypefun
+o
+@deftypefun int gcry_mpi_get_flag (@w{gcry_mpi_t @var{a}}, @
+ @w{enum gcry_mpi_flag @var{flag}})
+
+Return true if @var{flag} is set for @var{a}.
 @end deftypefun
 
-@deftypefun int gcry_mpi_get_flag (@w{gcry_mpi_t @var{a}}, @w{enum gcry_mpi_flag @var{flag}})
 
-Return true when the @var{flag} is set for @var{a}.
-@end deftypefun
+To put a random value into an MPI, the following convenience function
+may be used:
 
 @deftypefun void gcry_mpi_randomize (@w{gcry_mpi_t @var{w}}, @w{unsigned int @var{nbits}}, @w{enum gcry_random_level @var{level}})
 
@@ -3918,7 +4267,8 @@ wrong.
 @chapter Utilities
 
 @menu
-* Memory allocation:: Functions related with memory allocation.
+* Memory allocation::   Functions related with memory allocation.
+* Context management::  Functions related with context management.
 @end menu
 
 @node Memory allocation
@@ -3959,6 +4309,25 @@ gcry_realloc tries to use secure memory as well.
 @deftypefun void gcry_free (void *@var{p})
 Release the memory area pointed to by @var{p}.
 @end deftypefun
+
+
+@node Context management
+@section Context management
+
+Some function make use of a context object.  As of now there are only
+a few math functions. However, future versions of Libgcrypt may make
+more use of this context object.
+
+@deftp {Data type} {gcry_ctx_t}
+This type is used to refer to the general purpose context object.
+@end deftp
+
+@anchor{gcry_ctx_release}
+@deftypefun void gcry_ctx_release (gcry_ctx_t @var{ctx})
+Release the context object @var{ctx} and all associated resources.  A
+@code{NULL} passed as @var{ctx} is ignored.
+@end deftypefun
+
 
 @c **********************************************************
 @c *********************  Tools  ****************************

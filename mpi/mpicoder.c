@@ -270,7 +270,7 @@ do_get_buffer (gcry_mpi_t a, unsigned int *nbytes, int *sign, int force_secure)
 
   /* This is sub-optimal but we need to do the shift operation because
      the caller has to free the returned buffer.  */
-  for (p=buffer; !*p && *nbytes; p++, --*nbytes)
+  for (p=buffer; *nbytes && !*p; p++, --*nbytes)
     ;
   if (p != buffer)
     memmove (buffer,p, *nbytes);
@@ -304,6 +304,12 @@ _gcry_mpi_set_buffer (gcry_mpi_t a, const void *buffer_arg,
   mpi_limb_t alimb;
   int nlimbs;
   int i;
+
+  if (mpi_is_immutable (a))
+    {
+      mpi_immutable_failed ();
+      return;
+    }
 
   nlimbs = (nbytes + BYTES_PER_MPI_LIMB - 1) / BYTES_PER_MPI_LIMB;
   RESIZE_IF_NEEDED(a, nlimbs);

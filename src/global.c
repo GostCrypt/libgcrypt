@@ -1,6 +1,8 @@
 /* global.c  -	global control functions
  * Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003
- *               2004, 2005, 2006, 2008, 2011  Free Software Foundation, Inc.
+ *               2004, 2005, 2006, 2008, 2011,
+ *               2012  Free Software Foundation, Inc.
+ * Copyright (C) 2013 g10 Code GmbH
  *
  * This file is part of Libgcrypt.
  *
@@ -65,6 +67,8 @@ static struct
     { HWF_PADLOCK_SHA, "padlock-sha" },
     { HWF_PADLOCK_MMUL,"padlock-mmul"},
     { HWF_INTEL_AESNI, "intel-aesni" },
+    { HWF_INTEL_RDRAND,"intel-rdrand" },
+    { HWF_INTEL_AVX,   "intel-avx" },
     { 0, NULL}
   };
 
@@ -101,6 +105,9 @@ global_init (void)
     return;
   any_init_done = 1;
 
+  /* Tell the random module that we have seen an init call.  */
+  _gcry_set_preferred_rng_type (0);
+
   /* Initialize our portable thread/mutex wrapper.  */
   err = ath_init ();
   if (err)
@@ -132,6 +139,9 @@ global_init (void)
   if (err)
     goto fail;
   err = _gcry_secmem_module_init ();
+  if (err)
+    goto fail;
+  err = _gcry_mpi_init ();
   if (err)
     goto fail;
 
@@ -238,6 +248,9 @@ gcry_check_version( const char *req_version )
     int rq_major, rq_minor, rq_micro;
     const char *my_plvl;
 
+    if (req_version && req_version[0] == 1 && req_version[1] == 1)
+        return _gcry_compat_identification ();
+
     /* Initialize library.  */
     global_init ();
 
@@ -294,6 +307,23 @@ print_config ( int (*fnc)(FILE *fp, const char *format, ...), FILE *fp)
                 "w32:"
 #endif
        "\n");
+  fnc (fp, "cpu-arch:"
+#if defined(HAVE_CPU_ARCH_X86)
+       "x86"
+#elif defined(HAVE_CPU_ARCH_ALPHA)
+       "alpha"
+#elif defined(HAVE_CPU_ARCH_SPARC)
+       "sparc"
+#elif defined(HAVE_CPU_ARCH_MIPS)
+       "mips"
+#elif defined(HAVE_CPU_ARCH_M68K)
+       "m68k"
+#elif defined(HAVE_CPU_ARCH_PPC)
+       "ppc"
+#elif defined(HAVE_CPU_ARCH_ARM)
+       "arm"
+#endif
+       ":\n");
   fnc (fp, "mpi-asm:%s:\n", _gcry_mpi_get_hw_config ());
   fnc (fp, "threads:%s:\n", ath_get_model (NULL));
   hwf = _gcry_get_hw_features ();
@@ -308,6 +338,21 @@ print_config ( int (*fnc)(FILE *fp, const char *format, ...), FILE *fp)
   fnc (fp, "fips-mode:%c:%c:\n",
        fips_mode ()? 'y':'n',
        _gcry_enforced_fips_mode ()? 'y':'n' );
+  /* The currently used RNG type.  */
+  {
+    const char *s;
+
+    i = _gcry_get_rng_type (0);
+    switch (i)
+      {
+      case GCRY_RNG_TYPE_STANDARD: s = "standard"; break;
+      case GCRY_RNG_TYPE_FIPS:     s = "fips"; break;
+      case GCRY_RNG_TYPE_SYSTEM:   s = "system"; break;
+      default: BUG ();
+      }
+    fnc (fp, "rng-type:%s:%d:\n", s, i);
+  }
+
 }
 
 
@@ -328,6 +373,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       break;
 
     case GCRYCTL_ENABLE_QUICK_RANDOM:
+      _gcry_set_preferred_rng_type (0);
       _gcry_enable_quick_random_gen ();
       break;
 
@@ -373,16 +419,19 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       break;
 
     case GCRYCTL_DISABLE_SECMEM_WARN:
+      _gcry_set_preferred_rng_type (0);
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
 			       | GCRY_SECMEM_FLAG_NO_WARNING));
       break;
 
     case GCRYCTL_SUSPEND_SECMEM_WARN:
+      _gcry_set_preferred_rng_type (0);
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
 			       | GCRY_SECMEM_FLAG_SUSPEND_WARNING));
       break;
 
     case GCRYCTL_RESUME_SECMEM_WARN:
+      _gcry_set_preferred_rng_type (0);
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
 			       & ~GCRY_SECMEM_FLAG_SUSPEND_WARNING));
       break;
@@ -393,15 +442,18 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       break;
 
     case GCRYCTL_SET_RANDOM_SEED_FILE:
+      _gcry_set_preferred_rng_type (0);
       _gcry_set_random_seed_file (va_arg (arg_ptr, const char *));
       break;
 
     case GCRYCTL_UPDATE_RANDOM_SEED_FILE:
+      _gcry_set_preferred_rng_type (0);
       if ( fips_is_operational () )
         _gcry_update_random_seed_file ();
       break;
 
     case GCRYCTL_SET_VERBOSITY:
+      _gcry_set_preferred_rng_type (0);
       _gcry_set_log_verbosity (va_arg (arg_ptr, int));
       break;
 
@@ -447,12 +499,14 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       break;
 
     case GCRYCTL_SET_THREAD_CBS:
+      _gcry_set_preferred_rng_type (0);
       err = ath_install (va_arg (arg_ptr, void *));
       if (!err)
 	global_init ();
       break;
 
     case GCRYCTL_FAST_POLL:
+      _gcry_set_preferred_rng_type (0);
       /* We need to do make sure that the random pool is really
          initialized so that the poll function is not a NOP. */
       _gcry_random_initialize (1);
@@ -463,6 +517,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
 
     case GCRYCTL_SET_RNDEGD_SOCKET:
 #if USE_RNDEGD
+      _gcry_set_preferred_rng_type (0);
       err = _gcry_rndegd_set_socket_name (va_arg (arg_ptr, const char *));
 #else
       err = gpg_error (GPG_ERR_NOT_SUPPORTED);
@@ -470,12 +525,14 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       break;
 
     case GCRYCTL_SET_RANDOM_DAEMON_SOCKET:
+      _gcry_set_preferred_rng_type (0);
       _gcry_set_random_daemon_socket (va_arg (arg_ptr, const char *));
       break;
 
     case GCRYCTL_USE_RANDOM_DAEMON:
       /* We need to do make sure that the random pool is really
          initialized so that the poll function is not a NOP. */
+      _gcry_set_preferred_rng_type (0);
       _gcry_random_initialize (1);
       _gcry_use_random_daemon (!! va_arg (arg_ptr, int));
       break;
@@ -487,6 +544,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
     case GCRYCTL_PRINT_CONFIG:
       {
         FILE *fp = va_arg (arg_ptr, FILE *);
+        _gcry_set_preferred_rng_type (0);
         print_config (fp?fprintf:_gcry_log_info_with_dummy_fp, fp);
       }
       break;
@@ -494,6 +552,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
     case GCRYCTL_OPERATIONAL_P:
       /* Returns true if the library is in an operational state.  This
          is always true for non-fips mode.  */
+      _gcry_set_preferred_rng_type (0);
       if (_gcry_fips_test_operational ())
         err = GPG_ERR_GENERAL; /* Used as TRUE value */
       break;
@@ -510,6 +569,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
          the library has already been initialized into fips mode, a
          selftest is triggered.  It is not possible to put the libraty
          into fips mode after having passed the initialization. */
+      _gcry_set_preferred_rng_type (0);
       if (!any_init_done)
         {
           /* Not yet intialized at all.  Set a flag so that we are put
@@ -599,9 +659,49 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       }
       break;
 
+    case GCRYCTL_SET_ENFORCED_FIPS_FLAG:
+      if (!any_init_done)
+        {
+          /* Not yet initialized at all.  Set the enforced fips mode flag */
+          _gcry_set_preferred_rng_type (0);
+          _gcry_set_enforced_fips_mode ();
+        }
+      else
+        err = GPG_ERR_GENERAL;
+      break;
+
+    case GCRYCTL_SET_PREFERRED_RNG_TYPE:
+      /* This may be called before gcry_check_version.  */
+      {
+        int i = va_arg (arg_ptr, int);
+        /* Note that we may not pass 0 to _gcry_set_preferred_rng_type.  */
+        if (i > 0)
+          _gcry_set_preferred_rng_type (i);
+      }
+      break;
+
+    case GCRYCTL_GET_CURRENT_RNG_TYPE:
+      {
+        int *ip = va_arg (arg_ptr, int*);
+        if (ip)
+          *ip = _gcry_get_rng_type (!any_init_done);
+      }
+      break;
+
+    case GCRYCTL_DISABLE_LOCKED_SECMEM:
+      _gcry_set_preferred_rng_type (0);
+      _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
+			       | GCRY_SECMEM_FLAG_NO_MLOCK));
+      break;
+
+    case GCRYCTL_DISABLE_PRIV_DROP:
+      _gcry_set_preferred_rng_type (0);
+      _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
+			       | GCRY_SECMEM_FLAG_NO_PRIV_DROP));
+      break;
+
     default:
-      /* A call to make sure that the dummy code is linked in.  */
-      _gcry_compat_identification ();
+      _gcry_set_preferred_rng_type (0);
       err = GPG_ERR_INV_OP;
     }
 

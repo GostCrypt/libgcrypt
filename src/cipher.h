@@ -95,6 +95,40 @@ void _gcry_aes_ctr_enc (void *context, unsigned char *ctr,
                         void *outbuf_arg, const void *inbuf_arg,
                         unsigned int nblocks);
 
+/*-- cast5.c --*/
+void _gcry_cast5_cfb_dec (void *context, unsigned char *iv,
+			  void *outbuf_arg, const void *inbuf_arg,
+			  unsigned int nblocks);
+
+void _gcry_cast5_cbc_dec (void *context, unsigned char *iv,
+			  void *outbuf_arg, const void *inbuf_arg,
+			  unsigned int nblocks);
+
+void _gcry_cast5_ctr_enc (void *context, unsigned char *ctr,
+			  void *outbuf_arg, const void *inbuf_arg,
+			  unsigned int nblocks);
+
+/*-- camellia-glue.c --*/
+void _gcry_camellia_ctr_enc (void *context, unsigned char *ctr,
+                             void *outbuf_arg, const void *inbuf_arg,
+                             unsigned int nblocks);
+void _gcry_camellia_cbc_dec (void *context, unsigned char *iv,
+                             void *outbuf_arg, const void *inbuf_arg,
+                             unsigned int nblocks);
+void _gcry_camellia_cfb_dec (void *context, unsigned char *iv,
+                             void *outbuf_arg, const void *inbuf_arg,
+                             unsigned int nblocks);
+
+/*-- serpent.c --*/
+void _gcry_serpent_ctr_enc (void *context, unsigned char *ctr,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
+void _gcry_serpent_cbc_dec (void *context, unsigned char *iv,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
+void _gcry_serpent_cfb_dec (void *context, unsigned char *iv,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
 
 /*-- dsa.c --*/
 void _gcry_register_pk_dsa_progress (gcry_handler_progress_t cbc, void *cb_data);

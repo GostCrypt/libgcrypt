@@ -723,6 +723,31 @@ gcry_cipher_open (gcry_cipher_hd_t *handle,
               h->bulk.ctr_enc = _gcry_aes_ctr_enc;
               break;
 #endif /*USE_AES*/
+#ifdef USE_CAST5
+	    case GCRY_CIPHER_CAST5:
+              h->bulk.cfb_dec = _gcry_cast5_cfb_dec;
+              h->bulk.cbc_dec = _gcry_cast5_cbc_dec;
+              h->bulk.ctr_enc = _gcry_cast5_ctr_enc;
+              break;
+#endif /*USE_CAMELLIA*/
+#ifdef USE_CAMELLIA
+	    case GCRY_CIPHER_CAMELLIA128:
+	    case GCRY_CIPHER_CAMELLIA192:
+	    case GCRY_CIPHER_CAMELLIA256:
+              h->bulk.cbc_dec = _gcry_camellia_cbc_dec;
+              h->bulk.cfb_dec = _gcry_camellia_cfb_dec;
+              h->bulk.ctr_enc = _gcry_camellia_ctr_enc;
+              break;
+#endif /*USE_CAMELLIA*/
+#ifdef USE_SERPENT
+	    case GCRY_CIPHER_SERPENT128:
+	    case GCRY_CIPHER_SERPENT192:
+	    case GCRY_CIPHER_SERPENT256:
+              h->bulk.cbc_dec = _gcry_serpent_cbc_dec;
+              h->bulk.cfb_dec = _gcry_serpent_cfb_dec;
+              h->bulk.ctr_enc = _gcry_serpent_ctr_enc;
+              break;
+#endif /*USE_SERPENT*/
 
             default:
               break;

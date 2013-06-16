@@ -1,23 +1,26 @@
 /* gcrypt.h -  GNU Cryptographic Library Interface              -*- c -*-
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006
-                 2007, 2008, 2009, 2010, 2011  Free Software Foundation, Inc.
-
-   This file is part of Libgcrypt.
-
-   Libgcrypt is free software; you can redistribute it and/or modify
-   it under the terms of the GNU Lesser General Public License as
-   published by the Free Software Foundation; either version 2.1 of
-   the License, or (at your option) any later version.
-
-   Libgcrypt is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with this program; if not, see <http://www.gnu.org/licenses/>.
-
-   File: @configure_input@ */
+ * Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+ *               2006, 2007, 2008, 2009, 2010, 2011,
+ *               2012  Free Software Foundation, Inc.
+ * Copyright (C) 2012, 2013  g10 Code GmbH
+ *
+ * This file is part of Libgcrypt.
+ *
+ * Libgcrypt is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * Libgcrypt is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this program; if not, see <http://www.gnu.org/licenses/>.
+ *
+ * File: @configure_input@
+ */
 
 #ifndef _GCRYPT_H
 #define _GCRYPT_H
@@ -62,6 +65,11 @@ extern "C" {
    autoconf (using the AM_PATH_GCRYPT macro) check that this header
    matches the installed library.  */
 #define GCRYPT_VERSION "@VERSION@"
+
+/* The version number of this header.  It may be used to handle minor
+   API incompatibilities.  */
+#define GCRYPT_VERSION_NUMBER @VERSION_NUMBER@
+
 
 /* Internal: We can't use the convenience macros for the multi
    precision integer functions when building this library. */
@@ -209,9 +217,15 @@ struct gcry_thread_cbs
 
 
 
-/* The data object used to hold a multi precision integer.  */
+/* A generic context object as used by some functions.  */
+struct gcry_context;
+typedef struct gcry_context *gcry_ctx_t;
+
+/* The data objects used to hold multi precision integers.  */
 struct gcry_mpi;
 typedef struct gcry_mpi *gcry_mpi_t;
+struct gcry_mpi_point;
+typedef struct gcry_mpi_point *gcry_mpi_point_t;
 
 #ifndef GCRYPT_NO_DEPRECATED
 typedef struct gcry_mpi *GCRY_MPI _GCRY_GCC_ATTR_DEPRECATED;
@@ -285,7 +299,12 @@ enum gcry_ctl_cmds
     GCRYCTL_FORCE_FIPS_MODE = 56,
     GCRYCTL_SELFTEST = 57,
     /* Note: 58 .. 62 are used internally.  */
-    GCRYCTL_DISABLE_HWF = 63
+    GCRYCTL_DISABLE_HWF = 63,
+    GCRYCTL_SET_ENFORCED_FIPS_FLAG = 64,
+    GCRYCTL_SET_PREFERRED_RNG_TYPE = 65,
+    GCRYCTL_GET_CURRENT_RNG_TYPE = 66,
+    GCRYCTL_DISABLE_LOCKED_SECMEM = 67,
+    GCRYCTL_DISABLE_PRIV_DROP = 68
   };
 
 /* Perform various operations defined by CMD. */
@@ -442,11 +461,20 @@ enum gcry_mpi_format
 enum gcry_mpi_flag
   {
     GCRYMPI_FLAG_SECURE = 1,  /* Allocate the number in "secure" memory.  */
-    GCRYMPI_FLAG_OPAQUE = 2   /* The number is not a real one but just
+    GCRYMPI_FLAG_OPAQUE = 2,  /* The number is not a real one but just
                                  a way to store some bytes.  This is
                                  useful for encrypted big integers.  */
+    GCRYMPI_FLAG_IMMUTABLE = 4, /* Mark the MPI as immutable.  */
+    GCRYMPI_FLAG_CONST     = 8  /* Mark the MPI as a constant.  */
   };
 
+
+/* Macros to return pre-defined MPI constants.  */
+#define GCRYMPI_CONST_ONE   (_gcry_mpi_get_const (1))
+#define GCRYMPI_CONST_TWO   (_gcry_mpi_get_const (2))
+#define GCRYMPI_CONST_THREE (_gcry_mpi_get_const (3))
+#define GCRYMPI_CONST_FOUR  (_gcry_mpi_get_const (4))
+#define GCRYMPI_CONST_EIGHT (_gcry_mpi_get_const (8))
 
 /* Allocate a new big integer object, initialize it with 0 and
    initially allocate memory for a number of at least NBITS. */
@@ -460,6 +488,9 @@ void gcry_mpi_release (gcry_mpi_t a);
 
 /* Create a new number with the same value as A. */
 gcry_mpi_t gcry_mpi_copy (const gcry_mpi_t a);
+
+/* Store the big integer value U in W and release U.  */
+void gcry_mpi_snatch (gcry_mpi_t w, gcry_mpi_t u);
 
 /* Store the big integer value U in W. */
 gcry_mpi_t gcry_mpi_set (gcry_mpi_t w, const gcry_mpi_t u);
@@ -563,6 +594,66 @@ int gcry_mpi_gcd (gcry_mpi_t g, gcry_mpi_t a, gcry_mpi_t b);
    Return true if the value exists. */
 int gcry_mpi_invm (gcry_mpi_t x, gcry_mpi_t a, gcry_mpi_t m);
 
+/* Create a new point object.  NBITS is usually 0.  */
+gcry_mpi_point_t gcry_mpi_point_new (unsigned int nbits);
+
+/* Release the object POINT.  POINT may be NULL. */
+void gcry_mpi_point_release (gcry_mpi_point_t point);
+
+/* Store the projective coordinates from POINT into X, Y, and Z.  */
+void gcry_mpi_point_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                         gcry_mpi_point_t point);
+
+/* Store the projective coordinates from POINT into X, Y, and Z and
+   release POINT.  */
+void gcry_mpi_point_snatch_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                                gcry_mpi_point_t point);
+
+/* Store the projective coordinates X, Y, and Z into POINT.  */
+gcry_mpi_point_t gcry_mpi_point_set (gcry_mpi_point_t point,
+                                     gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z);
+
+/* Store the projective coordinates X, Y, and Z into POINT and release
+   X, Y, and Z.  */
+gcry_mpi_point_t gcry_mpi_point_snatch_set (gcry_mpi_point_t point,
+                                            gcry_mpi_t x, gcry_mpi_t y,
+                                            gcry_mpi_t z);
+
+/* Allocate a new context for elliptic curve operations based on the
+   parameters given by KEYPARAM or using CURVENAME.  */
+gpg_error_t gcry_mpi_ec_new (gcry_ctx_t *r_ctx,
+                             gcry_sexp_t keyparam, const char *curvename);
+
+/* Get a named MPI from an elliptic curve context.  */
+gcry_mpi_t gcry_mpi_ec_get_mpi (const char *name, gcry_ctx_t ctx, int copy);
+
+/* Get a named point from an elliptic curve context.  */
+gcry_mpi_point_t gcry_mpi_ec_get_point (const char *name,
+                                        gcry_ctx_t ctx, int copy);
+
+/* Store a named MPI into an elliptic curve context.  */
+gpg_error_t gcry_mpi_ec_set_mpi (const char *name, gcry_mpi_t newvalue,
+                                 gcry_ctx_t ctx);
+
+/* Store a named point into an elliptic curve context.  */
+gpg_error_t gcry_mpi_ec_set_point (const char *name, gcry_mpi_point_t newvalue,
+                                   gcry_ctx_t ctx);
+
+/* Store the affine coordinates of POINT into X and Y.  */
+int gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_point_t point,
+                            gcry_ctx_t ctx);
+
+/* W = 2 * U.  */
+void gcry_mpi_ec_dup (gcry_mpi_point_t w, gcry_mpi_point_t u, gcry_ctx_t ctx);
+
+/* W = U + V.  */
+void gcry_mpi_ec_add (gcry_mpi_point_t w,
+                      gcry_mpi_point_t u, gcry_mpi_point_t v, gcry_ctx_t ctx);
+
+/* W = N * U.  */
+void gcry_mpi_ec_mul (gcry_mpi_point_t w, gcry_mpi_t n, gcry_mpi_point_t u,
+                      gcry_ctx_t ctx);
+
 
 /* Return the number of bits required to represent A. */
 unsigned int gcry_mpi_get_nbits (gcry_mpi_t a);
@@ -610,6 +701,9 @@ void gcry_mpi_clear_flag (gcry_mpi_t a, enum gcry_mpi_flag flag);
 /* Return true when the FLAG is set for A. */
 int gcry_mpi_get_flag (gcry_mpi_t a, enum gcry_mpi_flag flag);
 
+/* Private function - do not use.  */
+gcry_mpi_t _gcry_mpi_get_const (int no);
+
 /* Unless the GCRYPT_NO_MPI_MACROS is used, provide a couple of
    convenience macros for the big integer functions. */
 #ifndef GCRYPT_NO_MPI_MACROS
@@ -624,6 +718,7 @@ int gcry_mpi_get_flag (gcry_mpi_t a, enum gcry_mpi_flag flag);
   while (0)
 
 #define mpi_copy( a )          gcry_mpi_copy( (a) )
+#define mpi_snatch( w, u)      gcry_mpi_snatch( (w), (u) )
 #define mpi_set( w, u)         gcry_mpi_set( (w), (u) )
 #define mpi_set_ui( w, u)      gcry_mpi_set_ui( (w), (u) )
 #define mpi_cmp( u, v )        gcry_mpi_cmp( (u), (v) )
@@ -645,6 +740,19 @@ int gcry_mpi_get_flag (gcry_mpi_t a, enum gcry_mpi_flag flag);
 #define mpi_mod(r,a,m)         gcry_mpi_mod ((r), (a), (m))
 #define mpi_gcd(g,a,b)         gcry_mpi_gcd ( (g), (a), (b) )
 #define mpi_invm(g,a,b)        gcry_mpi_invm ( (g), (a), (b) )
+
+#define mpi_point_new(n)              gcry_mpi_point_new((n))
+#define mpi_point_release(p)                    \
+  do                                            \
+    {                                           \
+      gcry_mpi_point_release ((p));             \
+      (p) = NULL;                               \
+    }                                           \
+  while (0)
+#define mpi_point_get(x,y,z,p)        gcry_mpi_point_get((x),(y),(z),(p))
+#define mpi_point_snatch_get(x,y,z,p) gcry_mpi_point_snatch_get((x),(y),(z),(p))
+#define mpi_point_set(p,x,y,z)        gcry_mpi_point_set((p),(x),(y),(z))
+#define mpi_point_snatch_set(p,x,y,z) gcry_mpi_point_snatch_set((p),(x),(y),(z))
 
 #define mpi_get_nbits(a)       gcry_mpi_get_nbits ((a))
 #define mpi_test_bit(a,b)      gcry_mpi_test_bit ((a),(b))
@@ -850,6 +958,10 @@ enum gcry_pk_algos
 #define GCRY_PK_USAGE_AUTH 8   /* Good for authentication. */
 #define GCRY_PK_USAGE_UNKN 128 /* Unknown usage flag. */
 
+/* Modes used with gcry_pubkey_get_sexp.  */
+#define GCRY_PK_GET_PUBKEY 1
+#define GCRY_PK_GET_SECKEY 2
+
 /* Encrypt the DATA using the public key PKEY and store the result as
    a newly created S-expression at RESULT. */
 gcry_error_t gcry_pk_encrypt (gcry_sexp_t *result,
@@ -897,8 +1009,8 @@ int gcry_pk_map_name (const char* name) _GCRY_GCC_ATTR_PURE;
    public or private KEY.  */
 unsigned int gcry_pk_get_nbits (gcry_sexp_t key) _GCRY_GCC_ATTR_PURE;
 
-/* Please note that keygrip is still experimental and should not be
-   used without contacting the author. */
+/* Return the so called KEYGRIP which is the SHA-1 hash of the public
+   key parameters expressed in a way depending on the algorithm.  */
 unsigned char *gcry_pk_get_keygrip (gcry_sexp_t key, unsigned char *array);
 
 /* Return the name of the curve matching KEY.  */
@@ -913,6 +1025,9 @@ gcry_sexp_t gcry_pk_get_param (int algo, const char *name);
 #define gcry_pk_test_algo(a) \
             gcry_pk_algo_info( (a), GCRYCTL_TEST_ALGO, NULL, NULL )
 
+/* Return an S-expression representing the context CTX.  */
+gcry_error_t gcry_pubkey_get_sexp (gcry_sexp_t *r_sexp,
+                                   int mode, gcry_ctx_t ctx);
 
 
 
@@ -1100,7 +1215,8 @@ enum gcry_kdf_algos
     GCRY_KDF_SALTED_S2K = 17,
     GCRY_KDF_ITERSALTED_S2K = 19,
     GCRY_KDF_PBKDF1 = 33,
-    GCRY_KDF_PBKDF2 = 34
+    GCRY_KDF_PBKDF2 = 34,
+    GCRY_KDF_SCRYPT = 48
   };
 
 /* Derive a key from a passphrase.  */
@@ -1118,6 +1234,14 @@ gpg_error_t gcry_kdf_derive (const void *passphrase, size_t passphraselen,
  *   Random Generating Functions    *
  *                                  *
  ************************************/
+
+/* The type of the random number generator.  */
+enum gcry_rng_types
+  {
+    GCRY_RNG_TYPE_STANDARD   = 1, /* The default CSPRNG generator.  */
+    GCRY_RNG_TYPE_FIPS       = 2, /* The FIPS X9.31 AES generator.  */
+    GCRY_RNG_TYPE_SYSTEM     = 3  /* The system's native generator. */
+  };
 
 /* The possible values for the random quality.  The rule of thumb is
    to use STRONG for session keys and VERY_STRONG for key material.
@@ -1238,6 +1362,9 @@ gcry_error_t gcry_prime_check (gcry_mpi_t x, unsigned int flags);
  *     Miscellaneous Stuff          *
  *                                  *
  ************************************/
+
+/* Release the context object CTX.  */
+void gcry_ctx_release (gcry_ctx_t ctx);
 
 /* Log levels used by the internal logging facility. */
 enum gcry_log_levels

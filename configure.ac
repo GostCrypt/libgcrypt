@@ -1,6 +1,7 @@
 # Configure.ac script for Libgcrypt
 # Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006,
 #               2007, 2008, 2009, 2011 Free Software Foundation, Inc.
+# Copyright (C) 2012, 2013  g10 Code GmbH
 #
 # This file is part of Libgcrypt.
 #
@@ -22,21 +23,33 @@ AC_REVISION($Revision$)
 AC_PREREQ(2.60)
 min_automake_version="1.10"
 
+# To build a release you need to create a tag with the version number
+# (git tag -s libgcrypt-n.m.k) and run "./autogen.sh --force".  Please
+# bump the version number immediately after the release and do another
+# commit and push so that the git magic is able to work.  See below
+# for the LT versions.
+m4_define(mym4_version_major, [1])
+m4_define(mym4_version_minor, [6])
+m4_define(mym4_version_micro, [0])
 
-# Remember to change the version number immediately *after* a release.
-# Set my_issvn to "yes" for non-released code.  Remember to run an
-# "svn up" and "autogen.sh" right before creating a distribution.
-m4_define([my_version], [1.6.0])
-m4_define([my_issvn], [yes])
+# Below is m4 magic to extract and compute the revision number, the
+# decimalized short revision number, a beta version string, and a flag
+# indicating a development version (mym4_isgit). Note that the m4
+# processing is done by autoconf and not during the configure run.
+m4_define(mym4_version,
+          [mym4_version_major.mym4_version_minor.mym4_version_micro])
+m4_define([mym4_revision],
+          m4_esyscmd([git rev-parse --short HEAD | tr -d '\n\r']))
+m4_define([mym4_revision_dec],
+          m4_esyscmd_s([echo $((0x$(echo ]mym4_revision[|head -c 4)))]))
+m4_define([mym4_betastring],
+          m4_esyscmd_s([git describe --match 'libgcrypt-[0-9].*[0-9]' --long|\
+                        awk -F- '$3!=0{print"-beta"$3}']))
+m4_define([mym4_isgit],m4_if(mym4_betastring,[],[no],[yes]))
+m4_define([mym4_full_version],[mym4_version[]mym4_betastring])
 
-m4_define([svn_revision], m4_esyscmd([printf "%d" $(svn info 2>/dev/null \
-          | sed -n '/^Revision:/ s/[^0-9]//gp'|head -1)]))
-m4_define([git_revision], m4_esyscmd([git branch -v 2>/dev/null \
-          | awk '/^\* / {printf "%s",$3}']))
-AC_INIT([libgcrypt],
-        [my_version[]m4_if(my_issvn,[yes],
-        [m4_if(git_revision,[],[-svn[]svn_revision],[-git[]git_revision])])],
-        [bug-libgcrypt@gnupg.org])
+AC_INIT([libgcrypt],[mym4_full_version],[http://bugs.gnupg.org])
+
 # LT Version numbers, remember to change them just *before* a release.
 #   (Interfaces removed:    CURRENT++, AGE=0, REVISION=0)
 #   (Interfaces added:      CURRENT++, AGE++, REVISION=0)
@@ -44,7 +57,7 @@ AC_INIT([libgcrypt],
 # CAUTION: Due to the ABI change in 1.6 the LT version numbers below have
 # already been set for the next release.  Thus don't update them for
 # the 1.6.0 release.
-LIBGCRYPT_LT_CURRENT=19
+LIBGCRYPT_LT_CURRENT=20
 LIBGCRYPT_LT_AGE=0
 LIBGCRYPT_LT_REVISION=0
 
@@ -52,17 +65,14 @@ LIBGCRYPT_LT_REVISION=0
 # If the API is changed in an incompatible way: increment the next counter.
 LIBGCRYPT_CONFIG_API_VERSION=1
 
-NEED_GPG_ERROR_VERSION=1.8
+NEED_GPG_ERROR_VERSION=1.11
 
-is_development_version=my_issvn
-m4_define([git_brevis],m4_esyscmd(printf "%u" 0x[]m4_substr(git_revision,0,4)))
-BUILD_REVISION=m4_if(git_revision,[],[svn_revision],[git_brevis])
 PACKAGE=$PACKAGE_NAME
 VERSION=$PACKAGE_VERSION
 
 AC_CONFIG_SRCDIR([src/libgcrypt.vers])
-AM_INIT_AUTOMAKE([])
-AM_CONFIG_HEADER(config.h)
+AM_INIT_AUTOMAKE
+AC_CONFIG_HEADER(config.h)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_LIBOBJ_DIR([compat])
 AC_CANONICAL_HOST
@@ -95,10 +105,14 @@ AH_BOTTOM([
    properly prefixed.  */
 #define CAMELLIA_EXT_SYM_PREFIX _gcry_
 
-/* This error code is only available with gpg-error 1.7.  Thus
-   we define it here with the usual gcry prefix.  */
-#define GCRY_GPG_ERR_NOT_OPERATIONAL  176
-
+/* These error codes are used but not defined in the required
+   libgpg-error 1.11.  Define them here. */
+#define GPG_ERR_NO_CRYPT_CTX	   191
+#define GPG_ERR_WRONG_CRYPT_CTX    192
+#define GPG_ERR_BAD_CRYPT_CTX	   193
+#define GPG_ERR_CRYPT_CTX_CONFLICT 194
+#define GPG_ERR_BROKEN_PUBKEY      195
+#define GPG_ERR_BROKEN_SECKEY      196
 
 #endif /*_GCRYPT_CONFIG_H_INCLUDED*/
 ])
@@ -119,6 +133,9 @@ AC_SUBST(PACKAGE)
 AC_SUBST(VERSION)
 AC_DEFINE_UNQUOTED(PACKAGE, "$PACKAGE", [Name of this package])
 AC_DEFINE_UNQUOTED(VERSION, "$VERSION", [Version of this package])
+VERSION_NUMBER=m4_esyscmd(printf "0x%02x%02x%02x" mym4_version_major \
+                          mym4_version_minor mym4_version_micro)
+AC_SUBST(VERSION_NUMBER)
 
 
 ######################
@@ -186,6 +203,11 @@ available_digests="crc gost3411 md4 md5 rmd160 sha1 sha256"
 available_digests_64="sha512 tiger whirlpool"
 enabled_digests=""
 
+# Definitions for kdfs (optional ones)
+available_kdfs="s2k pkdf2"
+available_kdfs_64="scrypt"
+enabled_kdfs=""
+
 # Definitions for random modules.
 available_random_modules="linux egd unix"
 auto_random_modules="$available_random_modules"
@@ -237,12 +259,6 @@ case "${host}" in
         AC_DEFINE(HAVE_DRIVE_LETTERS)
         AC_DEFINE(HAVE_DOSISH_SYSTEM)
         ;;
-
-    *-*-freebsd*)
-       # FreeBSD
-       CPPFLAGS="$CPPFLAGS -I/usr/local/include"
-       LDFLAGS="$LDFLAGS -L/usr/local/lib"
-       ;;
 
     *-*-hpux*)
         if test -z "$GCC" ; then
@@ -344,9 +360,11 @@ if test "$ac_cv_sizeof_unsigned_int" != "8" \
    && test "$ac_cv_sizeof_unsigned_long" != "8" \
    && test "$ac_cv_sizeof_unsigned_long_long" != "8" \
    && test "$ac_cv_sizeof_uint64_t" != "8"; then
-    AC_MSG_WARN([No 64-bit types.  Disabling TIGER/192, SHA-384, and SHA-512])
+    AC_MSG_WARN([No 64-bit types.  Disabling TIGER/192, SCRYPT, SHA-384, \
+ and SHA-512])
 else
   available_digests="$available_digests $available_digests_64"
+  available_kdfs="$available_kdfs $available_kdfs_64"
 fi
 
 # If not specified otherwise, all available algorithms will be
@@ -354,6 +372,7 @@ fi
 default_ciphers="$available_ciphers"
 default_pubkey_ciphers="$available_pubkey_ciphers"
 default_digests="$available_digests"
+default_kdfs="$available_kdfs"
 
 # Substitutions to set generated files in a Emacs buffer to read-only.
 AC_SUBST(emacs_local_vars_begin, ['Local Variables:'])
@@ -423,6 +442,26 @@ for digest in $enabled_digests; do
     fi
 done
 AC_MSG_RESULT([$enabled_digests])
+
+# Implementation of the --enable-kdfs switch.
+AC_ARG_ENABLE(kdfs,
+      AC_HELP_STRING([--enable-kfds=kdfs],
+		     [select the KDFs to include]),
+      [enabled_kdfs=`echo $enableval | tr ',:' '  ' | tr '[A-Z]' '[a-z]'`],
+      [enabled_kdfs=""])
+if test "x$enabled_kdfs" = "x" \
+   -o "$enabled_kdfs" = "yes"  \
+   -o "$enabled_kdfs" = "no"; then
+   enabled_kdfs=$default_kdfs
+fi
+AC_MSG_CHECKING([which key derivation functions to include])
+for kdf in $enabled_kdfs; do
+    LIST_MEMBER($kdf, $available_kdfs)
+    if test "$found" = "0"; then
+       AC_MSG_ERROR([unsupported key derivation function specified])
+    fi
+done
+AC_MSG_RESULT([$enabled_kdfs])
 
 # Implementation of the --enable-random switch.
 AC_ARG_ENABLE(random,
@@ -534,10 +573,26 @@ AC_ARG_ENABLE(aesni-support,
                  [Disable support for the Intel AES-NI instructions]),
 	      aesnisupport=$enableval,aesnisupport=yes)
 AC_MSG_RESULT($aesnisupport)
-if test x"$aesnisupport" = xyes ; then
-  AC_DEFINE(ENABLE_AESNI_SUPPORT, 1,
-            [Enable support for Intel AES-NI instructions.])
+
+# Implementation of the --disable-drng-support switch.
+AC_MSG_CHECKING([whether DRNG support is requested])
+AC_ARG_ENABLE(drng-support,
+              AC_HELP_STRING([--disable-drng-support],
+                 [Disable support for the Intel DRNG (RDRAND instruction)]),
+	      drngsupport=$enableval,drngsupport=yes)
+AC_MSG_RESULT($drngsupport)
+if test x"$drngsupport" = xyes ; then
+  AC_DEFINE(ENABLE_DRNG_SUPPORT, 1,
+            [Enable support for Intel DRNG (RDRAND instruction).])
 fi
+
+# Implementation of the --disable-avx-support switch.
+AC_MSG_CHECKING([whether AVX support is requested])
+AC_ARG_ENABLE(avx-support,
+              AC_HELP_STRING([--disable-avx-support],
+                 [Disable support for the Intel AVX instructions]),
+	      avxsupport=$enableval,avxsupport=yes)
+AC_MSG_RESULT($avxsupport)
 
 # Implementation of the --disable-O-flag-munging switch.
 AC_MSG_CHECKING([whether a -O flag munging is requested])
@@ -768,7 +823,7 @@ if test "$gcry_cv_visibility_attribute" = "yes"; then
        [gcry_cv_gcc_has_f_visibility=no
         _gcc_cflags_save=$CFLAGS
         CFLAGS="-fvisibility=hidden"
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])],
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],
                           gcry_cv_gcc_has_f_visibility=yes)
         CFLAGS=$_gcc_cflags_save;
        ])
@@ -781,6 +836,83 @@ if test "$gcry_cv_visibility_attribute" = "yes" \
    AC_DEFINE(GCRY_USE_VISIBILITY, 1,
                [Define to use the GNU C visibility attribute.])
    CFLAGS="$CFLAGS -fvisibility=hidden"
+fi
+
+
+#
+# Check whether the compiler supports the GCC style aligned attribute
+#
+AC_CACHE_CHECK([whether the GCC style aligned attribute is supported],
+       [gcry_cv_gcc_attribute_aligned],
+       [gcry_cv_gcc_attribute_aligned=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[struct { int a; } foo __attribute__ ((aligned (16)));]])],
+          [gcry_cv_gcc_attribute_aligned=yes])])
+if test "$gcry_cv_gcc_attribute_aligned" = "yes" ; then
+   AC_DEFINE(HAVE_GCC_ATTRIBUTE_ALIGNED,1,
+     [Defined if a GCC style "__attribute__ ((aligned (n))" is supported])
+fi
+
+
+#
+# Check whether the compiler supports 'asm' or '__asm__' keyword for
+# assembler blocks
+#
+AC_CACHE_CHECK([whether 'asm' assembler keyword is supported],
+       [gcry_cv_have_asm],
+       [gcry_cv_have_asm=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[void a(void) { asm("":::"memory"); }]])],
+          [gcry_cv_have_asm=yes])])
+AC_CACHE_CHECK([whether '__asm__' assembler keyword is supported],
+       [gcry_cv_have___asm__],
+       [gcry_cv_have___asm__=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[void a(void) { __asm__("":::"memory"); }]])],
+          [gcry_cv_have___asm__=yes])])
+if test "$gcry_cv_have_asm" = "no" ; then
+   if test "$gcry_cv_have___asm__" = "yes" ; then
+      AC_DEFINE(asm,__asm__,
+        [Define to supported assembler block keyword, if plain 'asm' was not
+         supported])
+   fi
+fi
+
+
+#
+# Check whether GCC inline assembler supports SSSE3 instructions
+# This is required for the AES-NI instructions.
+#
+AC_CACHE_CHECK([whether GCC inline assembler supports SSSE3 instructions],
+       [gcry_cv_gcc_inline_asm_ssse3],
+       [gcry_cv_gcc_inline_asm_ssse3=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[static unsigned char be_mask[16] __attribute__ ((aligned (16))) =
+              { 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+            void a(void) {
+              __asm__("pshufb %[mask], %%xmm2\n\t"::[mask]"m"(*be_mask):);
+            }]])],
+          [gcry_cv_gcc_inline_asm_ssse3=yes])])
+if test "$gcry_cv_gcc_inline_asm_ssse3" = "yes" ; then
+   AC_DEFINE(HAVE_GCC_INLINE_ASM_SSSE3,1,
+     [Defined if inline assembler supports SSSE3 instructions])
+fi
+
+
+#
+# Check whether GCC inline assembler supports AVX instructions
+#
+AC_CACHE_CHECK([whether GCC inline assembler supports AVX instructions],
+       [gcry_cv_gcc_inline_asm_avx],
+       [gcry_cv_gcc_inline_asm_avx=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[void a(void) {
+              __asm__("vaesdeclast (%[mem]),%%xmm0,%%xmm7\n\t"::[mem]"r"(0):);
+            }]])],
+          [gcry_cv_gcc_inline_asm_avx=yes])])
+if test "$gcry_cv_gcc_inline_asm_avx" = "yes" ; then
+   AC_DEFINE(HAVE_GCC_INLINE_ASM_AVX,1,
+     [Defined if inline assembler supports AVX instructions])
 fi
 
 
@@ -901,6 +1033,9 @@ fi
 #
 # Setup assembler stuff.
 #
+# Note that config.links also defines mpi_cpu_arch, which is required
+# later on.
+#
 GNUPG_SYS_SYMBOL_UNDERSCORE()
 AC_ARG_ENABLE(mpi-path,
               AC_HELP_STRING([--enable-mpi-path=EXTRA_PATH],
@@ -938,7 +1073,7 @@ AM_CONDITIONAL(MPI_MOD_C_MPIH_RSHIFT, test "$mpi_mod_c_mpih_rshift" = yes)
 AM_CONDITIONAL(MPI_MOD_C_UDIV, test "$mpi_mod_c_udiv" = yes)
 AM_CONDITIONAL(MPI_MOD_C_UDIV_QRNND, test "$mpi_mod_c_udiv_qrnnd" = yes)
 
-if test "$is_development_version" = "yes"; then
+if test mym4_isgit = "yes"; then
     AC_DEFINE(IS_DEVELOPMENT_VERSION,1,
               [Defined if this is not a regular release])
 fi
@@ -968,7 +1103,7 @@ if test "$GCC" = yes; then
         AC_MSG_CHECKING([if gcc supports -Wno-missing-field-initializers])
         _gcc_cflags_save=$CFLAGS
         CFLAGS="-Wno-missing-field-initializers"
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])],_gcc_wopt=yes,_gcc_wopt=no)
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],_gcc_wopt=yes,_gcc_wopt=no)
         AC_MSG_RESULT($_gcc_wopt)
         CFLAGS=$_gcc_cflags_save;
         if test x"$_gcc_wopt" = xyes ; then
@@ -982,7 +1117,7 @@ if test "$GCC" = yes; then
         AC_MSG_CHECKING([if gcc supports -Wpointer-arith])
         _gcc_cflags_save=$CFLAGS
         CFLAGS="-Wpointer-arith"
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])],_gcc_wopt=yes,_gcc_wopt=no)
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],_gcc_wopt=yes,_gcc_wopt=no)
         AC_MSG_RESULT($_gcc_wopt)
         CFLAGS=$_gcc_cflags_save;
         if test x"$_gcc_wopt" = xyes ; then
@@ -1017,8 +1152,32 @@ DATADIRNAME=$DATADIRNAME
 #### Conclusion. ####
 #####################
 
+# Check that requested feature can actually be used and define
+# ENABLE_foo_SUPPORT macros.
+
+if test x"$aesnisupport" = xyes ; then
+  if test "$gcry_cv_gcc_inline_asm_ssse3" != "yes" ; then
+    aesnisupport="no (unsupported by compiler)"
+  fi
+fi
+if test x"$avxsupport" = xyes ; then
+  if test "$gcry_cv_gcc_inline_asm_avx" != "yes" ; then
+    avxsupport="no (unsupported by compiler)"
+  fi
+fi
+
+if test x"$aesnisupport" = xyes ; then
+  AC_DEFINE(ENABLE_AESNI_SUPPORT, 1,
+            [Enable support for Intel AES-NI instructions.])
+fi
+if test x"$avxsupport" = xyes ; then
+  AC_DEFINE(ENABLE_AVX_SUPPORT,1,
+            [Enable support for Intel AVX instructions.])
+fi
+
+
 # Define conditional sources and config.h symbols depending on the
-# selected ciphers, pubkey-ciphers, digests and random modules.
+# selected ciphers, pubkey-ciphers, digests, kdfs, and random modules.
 
 LIST_MEMBER(arcfour, $enabled_ciphers)
 if test "$found" = "1"; then
@@ -1036,6 +1195,13 @@ LIST_MEMBER(cast5, $enabled_ciphers)
 if test "$found" = "1" ; then
    GCRYPT_CIPHERS="$GCRYPT_CIPHERS cast5.lo"
    AC_DEFINE(USE_CAST5, 1, [Defined if this module should be included])
+
+   case "${host}" in
+      x86_64-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS cast5-amd64.lo"
+      ;;
+   esac
 fi
 
 LIST_MEMBER(des, $enabled_ciphers)
@@ -1060,6 +1226,13 @@ LIST_MEMBER(serpent, $enabled_ciphers)
 if test "$found" = "1" ; then
    GCRYPT_CIPHERS="$GCRYPT_CIPHERS serpent.lo"
    AC_DEFINE(USE_SERPENT, 1, [Defined if this module should be included])
+
+   case "${host}" in
+      x86_64-*-*)
+         # Build with the SSE2 implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS serpent-sse2-amd64.lo"
+      ;;
+   esac
 fi
 
 LIST_MEMBER(rfc2268, $enabled_ciphers)
@@ -1078,6 +1251,13 @@ LIST_MEMBER(camellia, $enabled_ciphers)
 if test "$found" = "1" ; then
    GCRYPT_CIPHERS="$GCRYPT_CIPHERS camellia.lo camellia-glue.lo"
    AC_DEFINE(USE_CAMELLIA, 1, [Defined if this module should be included])
+
+   if test x"$avxsupport" = xyes ; then
+      if test x"$aesnisupport" = xyes ; then
+        # Build with the AES-NI/AVX implementation
+        GCRYPT_CIPHERS="$GCRYPT_CIPHERS camellia-aesni-avx-amd64.lo"
+      fi
+   fi
 fi
 
 LIST_MEMBER(idea, $enabled_ciphers)
@@ -1169,6 +1349,12 @@ GCRYPT_DIGESTS="$GCRYPT_DIGESTS rmd160.lo sha1.lo"
 AC_DEFINE(USE_RMD160, 1, [Defined if this module should be included])
 AC_DEFINE(USE_SHA1, 1,   [Defined if this module should be included])
 
+LIST_MEMBER(scrypt, $enabled_kdfs)
+if test "$found" = "1" ; then
+   GCRYPT_KDFS="$GCRYPT_KDFS scrypt.lo"
+   AC_DEFINE(USE_SCRYPT, 1, [Defined if this module should be included])
+fi
+
 LIST_MEMBER(linux, $random_modules)
 if test "$found" = "1" ; then
    GCRYPT_RANDOM="$GCRYPT_RANDOM rndlinux.lo"
@@ -1205,6 +1391,7 @@ fi
 AC_SUBST([GCRYPT_CIPHERS])
 AC_SUBST([GCRYPT_PUBKEY_CIPHERS])
 AC_SUBST([GCRYPT_DIGESTS])
+AC_SUBST([GCRYPT_KDFS])
 AC_SUBST([GCRYPT_RANDOM])
 
 AC_SUBST(LIBGCRYPT_CIPHERS, $enabled_ciphers)
@@ -1222,23 +1409,62 @@ AC_DEFINE_UNQUOTED(LIBGCRYPT_PUBKEY_CIPHERS, "$tmp",
 tmp=`echo "$enabled_digests" | tr ' ' : `
 AC_DEFINE_UNQUOTED(LIBGCRYPT_DIGESTS, "$tmp",
                    [List of available digest algorithms])
+tmp=`echo "$enabled_kdfs" | tr ' ' : `
+AC_DEFINE_UNQUOTED(LIBGCRYPT_KDFS, "$tmp",
+                   [List of available KDF algorithms])
 
 
+#
+# Define conditional sources depending on the used hardware platform.
+# Note that all possible modules must also be listed in
+# src/Makefile.am (EXTRA_libgcrypt_la_SOURCES).
+#
+GCRYPT_HWF_MODULES=
+case "$mpi_cpu_arch" in
+     x86)
+        AC_DEFINE(HAVE_CPU_ARCH_X86, 1,   [Defined for the x86 platforms])
+        GCRYPT_HWF_MODULES="hwf-x86.lo"
+        ;;
+     alpha)
+        AC_DEFINE(HAVE_CPU_ARCH_ALPHA, 1, [Defined for Alpha platforms])
+        ;;
+     sparc)
+        AC_DEFINE(HAVE_CPU_ARCH_SPARC, 1, [Defined for SPARC platforms])
+        ;;
+     mips)
+        AC_DEFINE(HAVE_CPU_ARCH_MIPS, 1,  [Defined for MIPS platforms])
+        ;;
+     m68k)
+        AC_DEFINE(HAVE_CPU_ARCH_M68K, 1,  [Defined for M68k platforms])
+        ;;
+     ppc)
+        AC_DEFINE(HAVE_CPU_ARCH_PPC, 1,   [Defined for PPC platforms])
+        ;;
+     arm)
+        AC_DEFINE(HAVE_CPU_ARCH_ARM, 1,   [Defined for ARM platforms])
+        ;;
+esac
+AC_SUBST([GCRYPT_HWF_MODULES])
 
-# Generate extended version information for W32.
-if test "$have_w32_system" = yes; then
-   BUILD_TIMESTAMP=`date --iso-8601=minutes`
-   changequote(,)dnl
-   BUILD_FILEVERSION=`echo "$VERSION" | sed 's/\([0-9.]*\).*/\1./;s/\./,/g'`
-   changequote([,])dnl
-   BUILD_FILEVERSION="${BUILD_FILEVERSION}${BUILD_REVISION}"
-fi
+
+#
+# Provide information about the build.
+#
+BUILD_REVISION="mym4_revision"
 AC_SUBST(BUILD_REVISION)
-AC_SUBST(BUILD_TIMESTAMP)
-AC_SUBST(BUILD_FILEVERSION)
 AC_DEFINE_UNQUOTED(BUILD_REVISION, "$BUILD_REVISION",
-                   [Subversion revision used to build this package])
+                   [GIT commit id revision used to build this package])
 
+changequote(,)dnl
+BUILD_FILEVERSION=`echo "$VERSION" | sed 's/\([0-9.]*\).*/\1./;s/\./,/g'`
+changequote([,])dnl
+BUILD_FILEVERSION="${BUILD_FILEVERSION}mym4_revision_dec"
+AC_SUBST(BUILD_FILEVERSION)
+
+BUILD_TIMESTAMP=`date -u +%Y-%m-%dT%H:%M+0000 2>/dev/null || date`
+AC_SUBST(BUILD_TIMESTAMP)
+AC_DEFINE_UNQUOTED(BUILD_TIMESTAMP, "$BUILD_TIMESTAMP",
+                   [The time this package was configured for a build])
 
 
 # And create the files.
@@ -1258,19 +1484,27 @@ tests/Makefile
 ])
 AC_OUTPUT
 
-# Give some feedback
-echo "
-        Libgcrypt v${VERSION} has been configured as follows:
 
-        Platform:                  $PRINTABLE_OS_NAME ($host)
-        Enabled cipher algorithms: $enabled_ciphers
-        Enabled digest algorithms: $enabled_digests
-        Enabled pubkey algorithms: $enabled_pubkey_ciphers
-        Random number generator:   $random
-        Using linux capabilities:  $use_capabilities
-        Try using Padlock crypto:  $padlocksupport
-        Try using AES-NI crypto:   $aesnisupport
-"
+detection_module="${GCRYPT_HWF_MODULES%.lo}"
+test -n "$detection_module" || detection_module="none"
+
+# Give some feedback
+GCRY_MSG_SHOW([],[])
+GCRY_MSG_SHOW([Libgcrypt],[v${VERSION} has been configured as follows:])
+GCRY_MSG_SHOW([],[])
+GCRY_MSG_SHOW([Platform:                 ],[$PRINTABLE_OS_NAME ($host)])
+GCRY_MSG_SHOW([Hardware detection module:],[$detection_module])
+GCRY_MSG_WRAP([Enabled cipher algorithms:],[$enabled_ciphers])
+GCRY_MSG_WRAP([Enabled digest algorithms:],[$enabled_digests])
+GCRY_MSG_WRAP([Enabled kdf algorithms:   ],[$enabled_kdfs])
+GCRY_MSG_WRAP([Enabled pubkey algorithms:],[$enabled_pubkey_ciphers])
+GCRY_MSG_SHOW([Random number generator:  ],[$random])
+GCRY_MSG_SHOW([Using linux capabilities: ],[$use_capabilities])
+GCRY_MSG_SHOW([Try using Padlock crypto: ],[$padlocksupport])
+GCRY_MSG_SHOW([Try using AES-NI crypto:  ],[$aesnisupport])
+GCRY_MSG_SHOW([Try using DRNG (RDRAND):  ],[$drngsupport])
+GCRY_MSG_SHOW([Try using Intel AVX:      ],[$avxsupport])
+GCRY_MSG_SHOW([],[])
 
 if test "$print_egd_notice" = "yes"; then
 cat <<G10EOF
@@ -1288,6 +1522,15 @@ cat <<G10EOF
    For more information consult the GnuPG webpages:
 
              http://www.gnupg.org/download.html#egd
+
+G10EOF
+fi
+
+if test "$gcry_cv_gcc_attribute_aligned" != "yes" ; then
+cat <<G10EOF
+
+   Please not that your compiler does not support the GCC style
+   aligned attribute. Using this software may evoke bus errors.
 
 G10EOF
 fi

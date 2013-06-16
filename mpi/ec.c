@@ -1,73 +1,71 @@
 /* ec.c -  Elliptic Curve functions
-   Copyright (C) 2007 Free Software Foundation, Inc.
-
-   This file is part of Libgcrypt.
-
-   Libgcrypt is free software; you can redistribute it and/or modify
-   it under the terms of the GNU Lesser General Public License as
-   published by the Free Software Foundation; either version 2.1 of
-   the License, or (at your option) any later version.
-
-   Libgcrypt is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-   USA.  */
-
+ * Copyright (C) 2007 Free Software Foundation, Inc.
+ * Copyright (C) 2013 g10 Code GmbH
+ *
+ * This file is part of Libgcrypt.
+ *
+ * Libgcrypt is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * Libgcrypt is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "mpi-internal.h"
 #include "longlong.h"
 #include "g10lib.h"
+#include "context.h"
+#include "ec-context.h"
 
 
-#define point_init(a)  _gcry_mpi_ec_point_init ((a))
-#define point_free(a)  _gcry_mpi_ec_point_free ((a))
+#define point_init(a)  _gcry_mpi_point_init ((a))
+#define point_free(a)  _gcry_mpi_point_free_parts ((a))
 
 
-/* Object to represent a point in projective coordinates. */
-/* Currently defined in mpi.h */
-
-/* This context is used with all our EC functions. */
-struct mpi_ec_ctx_s
+/* Create a new point option.  NBITS gives the size in bits of one
+   coordinate; it is only used to pre-allocate some resources and
+   might also be passed as 0 to use a default value.  */
+mpi_point_t
+gcry_mpi_point_new (unsigned int nbits)
 {
-  /* Domain parameters.  */
-  gcry_mpi_t p;   /* Prime specifying the field GF(p).  */
-  gcry_mpi_t a;   /* First coefficient of the Weierstrass equation.  */
+  mpi_point_t p;
 
-  int a_is_pminus3;  /* True if A = P - 3. */
+  (void)nbits;  /* Currently not used.  */
 
-  /* Some often used constants.  */
-  gcry_mpi_t one;
-  gcry_mpi_t two;
-  gcry_mpi_t three;
-  gcry_mpi_t four;
-  gcry_mpi_t eight;
-  gcry_mpi_t two_inv_p;
-
-  /* Scratch variables.  */
-  gcry_mpi_t scratch[11];
-
-  /* Helper for fast reduction.  */
-/*   int nist_nbits; /\* If this is a NIST curve, the number of bits.  *\/ */
-/*   gcry_mpi_t s[10]; */
-/*   gcry_mpi_t c; */
-
-};
+  p = gcry_xmalloc (sizeof *p);
+  _gcry_mpi_point_init (p);
+  return p;
+}
 
 
-
-/* Initialized a point object.  gcry_mpi_ec_point_free shall be used
-   to release this object.  */
+/* Release the point object P.  P may be NULL. */
 void
-_gcry_mpi_ec_point_init (mpi_point_t *p)
+gcry_mpi_point_release (mpi_point_t p)
+{
+  if (p)
+    {
+      _gcry_mpi_point_free_parts (p);
+      gcry_free (p);
+    }
+}
+
+
+/* Initialize the fields of a point object.  gcry_mpi_point_free_parts
+   may be used to release the fields.  */
+void
+_gcry_mpi_point_init (mpi_point_t p)
 {
   p->x = mpi_new (0);
   p->y = mpi_new (0);
@@ -75,24 +73,127 @@ _gcry_mpi_ec_point_init (mpi_point_t *p)
 }
 
 
-/* Release a point object. */
+/* Release the parts of a point object. */
 void
-_gcry_mpi_ec_point_free (mpi_point_t *p)
+_gcry_mpi_point_free_parts (mpi_point_t p)
 {
   mpi_free (p->x); p->x = NULL;
   mpi_free (p->y); p->y = NULL;
   mpi_free (p->z); p->z = NULL;
 }
 
+
 /* Set the value from S into D.  */
 static void
-point_set (mpi_point_t *d, mpi_point_t *s)
+point_set (mpi_point_t d, mpi_point_t s)
 {
   mpi_set (d->x, s->x);
   mpi_set (d->y, s->y);
   mpi_set (d->z, s->z);
 }
 
+
+/* Return a copy of POINT.  */
+static gcry_mpi_point_t
+point_copy (gcry_mpi_point_t point)
+{
+  gcry_mpi_point_t newpoint;
+
+  if (point)
+    {
+      newpoint = gcry_mpi_point_new (0);
+      point_set (newpoint, point);
+    }
+  else
+    newpoint = NULL;
+  return newpoint;
+}
+
+
+/* Set the projective coordinates from POINT into X, Y, and Z.  If a
+   coordinate is not required, X, Y, or Z may be passed as NULL.  */
+void
+gcry_mpi_point_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                    mpi_point_t point)
+{
+  if (x)
+    mpi_set (x, point->x);
+  if (y)
+    mpi_set (y, point->y);
+  if (z)
+    mpi_set (z, point->z);
+}
+
+
+/* Set the projective coordinates from POINT into X, Y, and Z and
+   release POINT.  If a coordinate is not required, X, Y, or Z may be
+   passed as NULL.  */
+void
+gcry_mpi_point_snatch_get (gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z,
+                           mpi_point_t point)
+{
+  mpi_snatch (x, point->x);
+  mpi_snatch (y, point->y);
+  mpi_snatch (z, point->z);
+  gcry_free (point);
+}
+
+
+/* Set the projective coordinates from X, Y, and Z into POINT.  If a
+   coordinate is given as NULL, the value 0 is stored into point.  If
+   POINT is given as NULL a new point object is allocated.  Returns
+   POINT or the newly allocated point object. */
+mpi_point_t
+gcry_mpi_point_set (mpi_point_t point,
+                    gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z)
+{
+  if (!point)
+    point = gcry_mpi_point_new (0);
+
+  if (x)
+    mpi_set (point->x, x);
+  else
+    mpi_clear (point->x);
+  if (y)
+    mpi_set (point->y, y);
+  else
+    mpi_clear (point->y);
+  if (z)
+    mpi_set (point->z, z);
+  else
+    mpi_clear (point->z);
+
+  return point;
+}
+
+
+/* Set the projective coordinates from X, Y, and Z into POINT.  If a
+   coordinate is given as NULL, the value 0 is stored into point.  If
+   POINT is given as NULL a new point object is allocated.  The
+   coordinates X, Y, and Z are released.  Returns POINT or the newly
+   allocated point object. */
+mpi_point_t
+gcry_mpi_point_snatch_set (mpi_point_t point,
+                           gcry_mpi_t x, gcry_mpi_t y, gcry_mpi_t z)
+{
+  if (!point)
+    point = gcry_mpi_point_new (0);
+
+  if (x)
+    mpi_snatch (point->x, x);
+  else
+    mpi_clear (point->x);
+  if (y)
+    mpi_snatch (point->y, y);
+  else
+    mpi_clear (point->y);
+  if (z)
+    mpi_snatch (point->z, z);
+  else
+    mpi_clear (point->z);
+
+  return point;
+}
 
 
 static void
@@ -236,49 +337,68 @@ ec_invm (gcry_mpi_t x, gcry_mpi_t a, mpi_ec_t ctx)
 }
 
 
-
-/* This function returns a new context for elliptic curve based on the
-   field GF(p).  P is the prime specifying thuis field, A is the first
-   coefficient.
-
-   This context needs to be released using _gcry_mpi_ec_free.  */
-mpi_ec_t
-_gcry_mpi_ec_init (gcry_mpi_t p, gcry_mpi_t a)
+/* Force recomputation of all helper variables.  */
+static void
+ec_get_reset (mpi_ec_t ec)
 {
-  int i;
-  mpi_ec_t ctx;
+  ec->t.valid.a_is_pminus3 = 0;
+  ec->t.valid.two_inv_p = 0;
+}
+
+
+/* Accessor for helper variable.  */
+static int
+ec_get_a_is_pminus3 (mpi_ec_t ec)
+{
   gcry_mpi_t tmp;
 
-  mpi_normalize (p);
-  mpi_normalize (a);
+  if (!ec->t.valid.a_is_pminus3)
+    {
+      ec->t.valid.a_is_pminus3 = 1;
+      tmp = mpi_alloc_like (ec->p);
+      mpi_sub_ui (tmp, ec->p, 3);
+      ec->t.a_is_pminus3 = !mpi_cmp (ec->a, tmp);
+      mpi_free (tmp);
+    }
 
-  /* Fixme: Do we want to check some constraints? e.g.
-     a < p
-  */
+  return ec->t.a_is_pminus3;
+}
 
-  ctx = gcry_xcalloc (1, sizeof *ctx);
+
+/* Accessor for helper variable.  */
+static gcry_mpi_t
+ec_get_two_inv_p (mpi_ec_t ec)
+{
+  if (!ec->t.valid.two_inv_p)
+    {
+      ec->t.valid.two_inv_p = 1;
+      if (!ec->t.two_inv_p)
+        ec->t.two_inv_p = mpi_alloc (0);
+      ec_invm (ec->t.two_inv_p, mpi_const (MPI_C_TWO), ec);
+    }
+  return ec->t.two_inv_p;
+}
+
+
+
+/* This function initialized a context for elliptic curve based on the
+   field GF(p).  P is the prime specifying this field, A is the first
+   coefficient.  CTX is expected to be zeroized.  */
+static void
+ec_p_init (mpi_ec_t ctx, gcry_mpi_t p, gcry_mpi_t a)
+{
+  int i;
+
+  /* Fixme: Do we want to check some constraints? e.g.  a < p  */
 
   ctx->p = mpi_copy (p);
   ctx->a = mpi_copy (a);
 
-  tmp = mpi_alloc_like (ctx->p);
-  mpi_sub_ui (tmp, ctx->p, 3);
-  ctx->a_is_pminus3 = !mpi_cmp (ctx->a, tmp);
-  mpi_free (tmp);
-
-
-  /* Allocate constants.  */
-  ctx->one   = mpi_alloc_set_ui (1);
-  ctx->two   = mpi_alloc_set_ui (2);
-  ctx->three = mpi_alloc_set_ui (3);
-  ctx->four  = mpi_alloc_set_ui (4);
-  ctx->eight = mpi_alloc_set_ui (8);
-  ctx->two_inv_p = mpi_alloc (0);
-  ec_invm (ctx->two_inv_p, ctx->two, ctx);
+  ec_get_reset (ctx);
 
   /* Allocate scratch variables.  */
-  for (i=0; i< DIM(ctx->scratch); i++)
-    ctx->scratch[i] = mpi_alloc_like (ctx->p);
+  for (i=0; i< DIM(ctx->t.scratch); i++)
+    ctx->t.scratch[i] = mpi_alloc_like (ctx->p);
 
   /* Prepare for fast reduction.  */
   /* FIXME: need a test for NIST values.  However it does not gain us
@@ -297,31 +417,31 @@ _gcry_mpi_ec_init (gcry_mpi_t p, gcry_mpi_t a)
 /*         ctx->s[i] = mpi_new (384); */
 /*       ctx->c    = mpi_new (384*2); */
 /*     } */
-
-  return ctx;
 }
 
-void
-_gcry_mpi_ec_free (mpi_ec_t ctx)
+
+static void
+ec_deinit (void *opaque)
 {
+  mpi_ec_t ctx = opaque;
   int i;
 
-  if (!ctx)
-    return;
-
+  /* Domain parameter.  */
   mpi_free (ctx->p);
   mpi_free (ctx->a);
+  mpi_free (ctx->b);
+  gcry_mpi_point_release (ctx->G);
+  mpi_free (ctx->n);
 
-  mpi_free (ctx->one);
-  mpi_free (ctx->two);
-  mpi_free (ctx->three);
-  mpi_free (ctx->four);
-  mpi_free (ctx->eight);
+  /* The key.  */
+  gcry_mpi_point_release (ctx->Q);
+  mpi_free (ctx->d);
 
-  mpi_free (ctx->two_inv_p);
+  /* Private data of ec.c.  */
+  mpi_free (ctx->t.two_inv_p);
 
-  for (i=0; i< DIM(ctx->scratch); i++)
-    mpi_free (ctx->scratch[i]);
+  for (i=0; i< DIM(ctx->t.scratch); i++)
+    mpi_free (ctx->t.scratch[i]);
 
 /*   if (ctx->nist_nbits == 192) */
 /*     { */
@@ -335,16 +455,205 @@ _gcry_mpi_ec_free (mpi_ec_t ctx)
 /*         mpi_free (ctx->s[i]); */
 /*       mpi_free (ctx->c); */
 /*     } */
-
-  gcry_free (ctx);
 }
+
+
+/* This function returns a new context for elliptic curve based on the
+   field GF(p).  P is the prime specifying this field, A is the first
+   coefficient.  This function is only used within Libgcrypt and not
+   part of the public API.
+
+   This context needs to be released using _gcry_mpi_ec_free.  */
+mpi_ec_t
+_gcry_mpi_ec_p_internal_new (gcry_mpi_t p, gcry_mpi_t a)
+{
+  mpi_ec_t ctx;
+
+  ctx = gcry_xcalloc (1, sizeof *ctx);
+  ec_p_init (ctx, p, a);
+
+  return ctx;
+}
+
+
+void
+_gcry_mpi_ec_free (mpi_ec_t ctx)
+{
+  if (ctx)
+    {
+      ec_deinit (ctx);
+      gcry_free (ctx);
+    }
+}
+
+
+/* This function returns a new context for elliptic curve operations
+   based on the field GF(p).  P is the prime specifying this field, A
+   is the first coefficient.  On success the new context is stored at
+   R_CTX and 0 is returned; on error NULL is stored at R_CTX and an
+   error code is returned.  The context needs to be released using
+   gcry_ctx_release.  This is an internal fucntions.  */
+gpg_err_code_t
+_gcry_mpi_ec_p_new (gcry_ctx_t *r_ctx, gcry_mpi_t p, gcry_mpi_t a)
+{
+  gcry_ctx_t ctx;
+  mpi_ec_t ec;
+
+  *r_ctx = NULL;
+  if (!p || !a || !mpi_cmp_ui (a, 0))
+    return GPG_ERR_EINVAL;
+
+  ctx = _gcry_ctx_alloc (CONTEXT_TYPE_EC, sizeof *ec, ec_deinit);
+  if (!ctx)
+    return gpg_err_code_from_syserror ();
+  ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+  ec_p_init (ec, p, a);
+
+  *r_ctx = ctx;
+  return 0;
+}
+
+gcry_mpi_t
+_gcry_mpi_ec_get_mpi (const char *name, gcry_ctx_t ctx, int copy)
+{
+  mpi_ec_t ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+
+  if (!strcmp (name, "p") && ec->p)
+    return mpi_is_const (ec->p) && !copy? ec->p : mpi_copy (ec->p);
+  if (!strcmp (name, "a") && ec->a)
+    return mpi_is_const (ec->a) && !copy? ec->a : mpi_copy (ec->a);
+  if (!strcmp (name, "b") && ec->b)
+    return mpi_is_const (ec->b) && !copy? ec->b : mpi_copy (ec->b);
+  if (!strcmp (name, "n") && ec->n)
+    return mpi_is_const (ec->n) && !copy? ec->n : mpi_copy (ec->n);
+  if (!strcmp (name, "d") && ec->d)
+    return mpi_is_const (ec->d) && !copy? ec->d : mpi_copy (ec->d);
+
+  /* Return a requested point coordinate.  */
+  if (!strcmp (name, "g.x") && ec->G && ec->G->x)
+    return mpi_is_const (ec->G->x) && !copy? ec->G->x : mpi_copy (ec->G->x);
+  if (!strcmp (name, "g.y") && ec->G && ec->G->y)
+    return mpi_is_const (ec->G->y) && !copy? ec->G->y : mpi_copy (ec->G->y);
+  if (!strcmp (name, "q.x") && ec->Q && ec->Q->x)
+    return mpi_is_const (ec->Q->x) && !copy? ec->Q->x : mpi_copy (ec->Q->x);
+  if (!strcmp (name, "q.y") && ec->Q && ec->Q->y)
+    return mpi_is_const (ec->G->y) && !copy? ec->Q->y : mpi_copy (ec->Q->y);
+
+  /* If a point has been requested, return it in standard encoding.  */
+  if (!strcmp (name, "g") && ec->G)
+    return _gcry_mpi_ec_ec2os (ec->G, ec);
+  if (!strcmp (name, "q"))
+    {
+      /* If only the private key is given, compute the public key.  */
+      if (!ec->Q && ec->d && ec->G && ec->p && ec->a)
+        {
+          ec->Q = gcry_mpi_point_new (0);
+          _gcry_mpi_ec_mul_point (ec->Q, ec->d, ec->G, ec);
+        }
+
+      if (ec->Q)
+        return _gcry_mpi_ec_ec2os (ec->Q, ec);
+    }
+
+  return NULL;
+}
+
+
+gcry_mpi_point_t
+_gcry_mpi_ec_get_point (const char *name, gcry_ctx_t ctx, int copy)
+{
+  mpi_ec_t ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+
+  (void)copy;  /* Not used.  */
+
+  if (!strcmp (name, "g") && ec->G)
+    return point_copy (ec->G);
+  if (!strcmp (name, "q"))
+    {
+      /* If only the private key is given, compute the public key.  */
+      if (!ec->Q && ec->d && ec->G && ec->p && ec->a)
+        {
+          ec->Q = gcry_mpi_point_new (0);
+          _gcry_mpi_ec_mul_point (ec->Q, ec->d, ec->G, ec);
+        }
+
+      if (ec->Q)
+        return point_copy (ec->Q);
+    }
+
+  return NULL;
+}
+
+
+gpg_err_code_t
+_gcry_mpi_ec_set_mpi (const char *name, gcry_mpi_t newvalue,
+                      gcry_ctx_t ctx)
+{
+  mpi_ec_t ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+
+  if (!strcmp (name, "p"))
+    {
+      mpi_free (ec->p);
+      ec->p = mpi_copy (newvalue);
+      ec_get_reset (ec);
+    }
+  else if (!strcmp (name, "a"))
+    {
+      mpi_free (ec->a);
+      ec->a = mpi_copy (newvalue);
+      ec_get_reset (ec);
+    }
+  else if (!strcmp (name, "b"))
+    {
+      mpi_free (ec->b);
+      ec->b = mpi_copy (newvalue);
+    }
+  else if (!strcmp (name, "n"))
+    {
+      mpi_free (ec->n);
+      ec->n = mpi_copy (newvalue);
+    }
+  else if (!strcmp (name, "d"))
+    {
+      mpi_free (ec->d);
+      ec->d = mpi_copy (newvalue);
+    }
+  else
+    return GPG_ERR_UNKNOWN_NAME;
+
+  return 0;
+}
+
+
+gpg_err_code_t
+_gcry_mpi_ec_set_point (const char *name, gcry_mpi_point_t newvalue,
+                        gcry_ctx_t ctx)
+{
+  mpi_ec_t ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+
+  if (!strcmp (name, "g"))
+    {
+      gcry_mpi_point_release (ec->G);
+      ec->G = point_copy (newvalue);
+    }
+  else if (!strcmp (name, "q"))
+    {
+      gcry_mpi_point_release (ec->Q);
+      ec->Q = point_copy (newvalue);
+    }
+  else
+    return GPG_ERR_UNKNOWN_NAME;
+
+  return 0;
+}
+
 
 /* Compute the affine coordinates from the projective coordinates in
    POINT.  Set them into X and Y.  If one coordinate is not required,
    X or Y may be passed as NULL.  CTX is the usual context. Returns: 0
    on success or !0 if POINT is at infinity.  */
 int
-_gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t *point,
+_gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t point,
                          mpi_ec_t ctx)
 {
   gcry_mpi_t z1, z2, z3;
@@ -374,22 +683,20 @@ _gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t *point,
 }
 
 
-
-
 
 /*  RESULT = 2 * POINT  */
 void
-_gcry_mpi_ec_dup_point (mpi_point_t *result, mpi_point_t *point, mpi_ec_t ctx)
+_gcry_mpi_ec_dup_point (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
 {
 #define x3 (result->x)
 #define y3 (result->y)
 #define z3 (result->z)
-#define t1 (ctx->scratch[0])
-#define t2 (ctx->scratch[1])
-#define t3 (ctx->scratch[2])
-#define l1 (ctx->scratch[3])
-#define l2 (ctx->scratch[4])
-#define l3 (ctx->scratch[5])
+#define t1 (ctx->t.scratch[0])
+#define t2 (ctx->t.scratch[1])
+#define t3 (ctx->t.scratch[2])
+#define l1 (ctx->t.scratch[3])
+#define l2 (ctx->t.scratch[4])
+#define l3 (ctx->t.scratch[5])
 
   if (!mpi_cmp_ui (point->y, 0) || !mpi_cmp_ui (point->z, 0))
     {
@@ -400,14 +707,14 @@ _gcry_mpi_ec_dup_point (mpi_point_t *result, mpi_point_t *point, mpi_ec_t ctx)
     }
   else
     {
-      if (ctx->a_is_pminus3)  /* Use the faster case.  */
+      if (ec_get_a_is_pminus3 (ctx))  /* Use the faster case.  */
         {
           /* L1 = 3(X - Z^2)(X + Z^2) */
           /*                          T1: used for Z^2. */
           /*                          T2: used for the right term.  */
-          ec_powm (t1, point->z, ctx->two, ctx);
+          ec_powm (t1, point->z, mpi_const (MPI_C_TWO), ctx);
           ec_subm (l1, point->x, t1, ctx);
-          ec_mulm (l1, l1, ctx->three, ctx);
+          ec_mulm (l1, l1, mpi_const (MPI_C_THREE), ctx);
           ec_addm (t2, point->x, t1, ctx);
           ec_mulm (l1, l1, t2, ctx);
         }
@@ -415,32 +722,32 @@ _gcry_mpi_ec_dup_point (mpi_point_t *result, mpi_point_t *point, mpi_ec_t ctx)
         {
           /* L1 = 3X^2 + aZ^4 */
           /*                          T1: used for aZ^4. */
-          ec_powm (l1, point->x, ctx->two, ctx);
-          ec_mulm (l1, l1, ctx->three, ctx);
-          ec_powm (t1, point->z, ctx->four, ctx);
+          ec_powm (l1, point->x, mpi_const (MPI_C_TWO), ctx);
+          ec_mulm (l1, l1, mpi_const (MPI_C_THREE), ctx);
+          ec_powm (t1, point->z, mpi_const (MPI_C_FOUR), ctx);
           ec_mulm (t1, t1, ctx->a, ctx);
           ec_addm (l1, l1, t1, ctx);
         }
       /* Z3 = 2YZ */
       ec_mulm (z3, point->y, point->z, ctx);
-      ec_mulm (z3, z3, ctx->two, ctx);
+      ec_mulm (z3, z3, mpi_const (MPI_C_TWO), ctx);
 
       /* L2 = 4XY^2 */
       /*                              T2: used for Y2; required later. */
-      ec_powm (t2, point->y, ctx->two, ctx);
+      ec_powm (t2, point->y, mpi_const (MPI_C_TWO), ctx);
       ec_mulm (l2, t2, point->x, ctx);
-      ec_mulm (l2, l2, ctx->four, ctx);
+      ec_mulm (l2, l2, mpi_const (MPI_C_FOUR), ctx);
 
       /* X3 = L1^2 - 2L2 */
       /*                              T1: used for L2^2. */
-      ec_powm (x3, l1, ctx->two, ctx);
-      ec_mulm (t1, l2, ctx->two, ctx);
+      ec_powm (x3, l1, mpi_const (MPI_C_TWO), ctx);
+      ec_mulm (t1, l2, mpi_const (MPI_C_TWO), ctx);
       ec_subm (x3, x3, t1, ctx);
 
       /* L3 = 8Y^4 */
       /*                              T2: taken from above. */
-      ec_powm (t2, t2, ctx->two, ctx);
-      ec_mulm (l3, t2, ctx->eight, ctx);
+      ec_powm (t2, t2, mpi_const (MPI_C_TWO), ctx);
+      ec_mulm (l3, t2, mpi_const (MPI_C_EIGHT), ctx);
 
       /* Y3 = L1(L2 - X3) - L3 */
       ec_subm (y3, l2, x3, ctx);
@@ -463,8 +770,8 @@ _gcry_mpi_ec_dup_point (mpi_point_t *result, mpi_point_t *point, mpi_ec_t ctx)
 
 /* RESULT = P1 + P2 */
 void
-_gcry_mpi_ec_add_points (mpi_point_t *result,
-                         mpi_point_t *p1, mpi_point_t *p2,
+_gcry_mpi_ec_add_points (mpi_point_t result,
+                         mpi_point_t p1, mpi_point_t p2,
                          mpi_ec_t ctx)
 {
 #define x1 (p1->x    )
@@ -476,17 +783,17 @@ _gcry_mpi_ec_add_points (mpi_point_t *result,
 #define x3 (result->x)
 #define y3 (result->y)
 #define z3 (result->z)
-#define l1 (ctx->scratch[0])
-#define l2 (ctx->scratch[1])
-#define l3 (ctx->scratch[2])
-#define l4 (ctx->scratch[3])
-#define l5 (ctx->scratch[4])
-#define l6 (ctx->scratch[5])
-#define l7 (ctx->scratch[6])
-#define l8 (ctx->scratch[7])
-#define l9 (ctx->scratch[8])
-#define t1 (ctx->scratch[9])
-#define t2 (ctx->scratch[10])
+#define l1 (ctx->t.scratch[0])
+#define l2 (ctx->t.scratch[1])
+#define l3 (ctx->t.scratch[2])
+#define l4 (ctx->t.scratch[3])
+#define l5 (ctx->t.scratch[4])
+#define l6 (ctx->t.scratch[5])
+#define l7 (ctx->t.scratch[6])
+#define l8 (ctx->t.scratch[7])
+#define l9 (ctx->t.scratch[8])
+#define t1 (ctx->t.scratch[9])
+#define t2 (ctx->t.scratch[10])
 
   if ( (!mpi_cmp (x1, x2)) && (!mpi_cmp (y1, y2)) && (!mpi_cmp (z1, z2)) )
     {
@@ -518,23 +825,23 @@ _gcry_mpi_ec_add_points (mpi_point_t *result,
         mpi_set (l1, x1);
       else
         {
-          ec_powm (l1, z2, ctx->two, ctx);
+          ec_powm (l1, z2, mpi_const (MPI_C_TWO), ctx);
           ec_mulm (l1, l1, x1, ctx);
         }
       if (z1_is_one)
-        mpi_set (l2, x1);
+        mpi_set (l2, x2);
       else
         {
-          ec_powm (l2, z1, ctx->two, ctx);
+          ec_powm (l2, z1, mpi_const (MPI_C_TWO), ctx);
           ec_mulm (l2, l2, x2, ctx);
         }
       /* l3 = l1 - l2 */
       ec_subm (l3, l1, l2, ctx);
       /* l4 = y1 z2^3  */
-      ec_powm (l4, z2, ctx->three, ctx);
+      ec_powm (l4, z2, mpi_const (MPI_C_THREE), ctx);
       ec_mulm (l4, l4, y1, ctx);
       /* l5 = y2 z1^3  */
-      ec_powm (l5, z1, ctx->three, ctx);
+      ec_powm (l5, z1, mpi_const (MPI_C_THREE), ctx);
       ec_mulm (l5, l5, y2, ctx);
       /* l6 = l4 - l5  */
       ec_subm (l6, l4, l5, ctx);
@@ -564,19 +871,19 @@ _gcry_mpi_ec_add_points (mpi_point_t *result,
           ec_mulm (z3, z1, z2, ctx);
           ec_mulm (z3, z3, l3, ctx);
           /* x3 = l6^2 - l7 l3^2  */
-          ec_powm (t1, l6, ctx->two, ctx);
-          ec_powm (t2, l3, ctx->two, ctx);
+          ec_powm (t1, l6, mpi_const (MPI_C_TWO), ctx);
+          ec_powm (t2, l3, mpi_const (MPI_C_TWO), ctx);
           ec_mulm (t2, t2, l7, ctx);
           ec_subm (x3, t1, t2, ctx);
           /* l9 = l7 l3^2 - 2 x3  */
-          ec_mulm (t1, x3, ctx->two, ctx);
+          ec_mulm (t1, x3, mpi_const (MPI_C_TWO), ctx);
           ec_subm (l9, t2, t1, ctx);
           /* y3 = (l9 l6 - l8 l3^3)/2  */
           ec_mulm (l9, l9, l6, ctx);
-          ec_powm (t1, l3, ctx->three, ctx); /* fixme: Use saved value*/
+          ec_powm (t1, l3, mpi_const (MPI_C_THREE), ctx); /* fixme: Use saved value*/
           ec_mulm (t1, t1, l8, ctx);
           ec_subm (y3, l9, t1, ctx);
-          ec_mulm (y3, y3, ctx->two_inv_p, ctx);
+          ec_mulm (y3, y3, ec_get_two_inv_p (ctx), ctx);
         }
     }
 
@@ -608,8 +915,8 @@ _gcry_mpi_ec_add_points (mpi_point_t *result,
    an integer SCALAR and a POINT as well as the usual context CTX.
    RESULT will be set to the resulting point. */
 void
-_gcry_mpi_ec_mul_point (mpi_point_t *result,
-                        gcry_mpi_t scalar, mpi_point_t *point,
+_gcry_mpi_ec_mul_point (mpi_point_t result,
+                        gcry_mpi_t scalar, mpi_point_t point,
                         mpi_ec_t ctx)
 {
 #if 0
@@ -632,7 +939,7 @@ _gcry_mpi_ec_mul_point (mpi_point_t *result,
 #else
   gcry_mpi_t x1, y1, z1, k, h, yy;
   unsigned int i, loops;
-  mpi_point_t p1, p2, p1inv;
+  mpi_point_struct p1, p2, p1inv;
 
   x1 = mpi_alloc_like (ctx->p);
   y1 = mpi_alloc_like (ctx->p);
@@ -666,14 +973,27 @@ _gcry_mpi_ec_mul_point (mpi_point_t *result,
       mpi_free (z2);
       mpi_free (z3);
     }
-  z1 = mpi_copy (ctx->one);
+  z1 = mpi_copy (mpi_const (MPI_C_ONE));
 
-  mpi_mul (h, k, ctx->three); /* h = 3k */
+  mpi_mul (h, k, mpi_const (MPI_C_THREE)); /* h = 3k */
   loops = mpi_get_nbits (h);
-
-  mpi_set (result->x, point->x);
-  mpi_set (result->y, yy); mpi_free (yy); yy = NULL;
-  mpi_set (result->z, point->z);
+  if (loops < 2)
+    {
+      /* If SCALAR is zero, the above mpi_mul sets H to zero and thus
+         LOOPs will be zero.  To avoid an underflow of I in the main
+         loop we set LOOP to 2 and the result to (0,0,0).  */
+      loops = 2;
+      mpi_clear (result->x);
+      mpi_clear (result->y);
+      mpi_clear (result->z);
+    }
+  else
+    {
+      mpi_set (result->x, point->x);
+      mpi_set (result->y, yy);
+      mpi_set (result->z, point->z);
+    }
+  mpi_free (yy); yy = NULL;
 
   p1.x = x1; x1 = NULL;
   p1.y = y1; y1 = NULL;
