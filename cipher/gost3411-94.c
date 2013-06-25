@@ -263,9 +263,9 @@ gost3411_read (void *context)
 
   return hd->h;
 }
-gcry_md_spec_t _gcry_digest_spec_gost3411 =
+gcry_md_spec_t _gcry_digest_spec_gost3411_94 =
   {
-    "GOST34.11", NULL, 0, NULL, 32,
+    "GOST34.11-94", NULL, 0, NULL, 32,
     gost3411_init, _gcry_md_block_write, gost3411_final, gost3411_read,
     sizeof (GOST3411_CONTEXT)
   };
