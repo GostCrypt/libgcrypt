@@ -70,6 +70,7 @@ sha256_init (void *context)
   hd->bctx.nblocks = 0;
   hd->bctx.count = 0;
   hd->bctx.blocksize = 64;
+  hd->bctx.stack_burn = 74*4+32;
   hd->bctx.bwrite = transform;
 }
 
