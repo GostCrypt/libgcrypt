@@ -2456,7 +2456,7 @@ check_pubkey_sign (int n, gcry_sexp_t skey, gcry_sexp_t pkey, int algo)
       {	"(data\n (flags pkcs1)\n"
 	" (value #11223344556677889900AA#))\n",
 	GCRY_PK_RSA,
-	GPG_ERR_CONFLICT },
+	0 },
       { "(data\n (flags raw foo)\n"
 	" (value #11223344556677889900AA#))\n",
 	0,
