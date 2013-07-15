@@ -1,5 +1,6 @@
 *.lo
 *.o
+*.orig
 .deps/
 .libs/
 po/*.gmo
@@ -97,5 +98,6 @@ tests/register
 tests/rsacvt
 tests/t-kdf
 tests/t-mpi-bit
+tests/t-mpi-point
 tests/tsexp
 tests/version
