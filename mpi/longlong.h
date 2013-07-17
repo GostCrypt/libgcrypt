@@ -184,7 +184,32 @@ extern UDItype __udiv_qrnnd ();
 /***************************************
  **************  ARM  ******************
  ***************************************/
-#if defined (__arm__) && W_TYPE_SIZE == 32 && !defined (__thumb__)
+#if defined (__arm__) && W_TYPE_SIZE == 32 && \
+    (!defined (__thumb__) || defined (__thumb2__))
+/* The __ARM_ARCH define is provided by gcc 4.8.  Construct it otherwise.  */
+#ifndef __ARM_ARCH
+# ifdef __ARM_ARCH_2__
+#  define __ARM_ARCH 2
+# elif defined (__ARM_ARCH_3__) || defined (__ARM_ARCH_3M__)
+#  define __ARM_ARCH 3
+# elif defined (__ARM_ARCH_4__) || defined (__ARM_ARCH_4T__)
+#  define __ARM_ARCH 4
+# elif defined (__ARM_ARCH_5__) || defined (__ARM_ARCH_5E__) \
+       || defined(__ARM_ARCH_5T__) || defined(__ARM_ARCH_5TE__) \
+       || defined(__ARM_ARCH_5TEJ__)
+#  define __ARM_ARCH 5
+# elif defined (__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
+       || defined (__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) \
+       || defined (__ARM_ARCH_6K__) || defined(__ARM_ARCH_6T2__)
+#  define __ARM_ARCH 6
+# elif defined (__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) \
+       || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) \
+       || defined(__ARM_ARCH_7EM__)
+#  define __ARM_ARCH 7
+# else
+   /* could not detect? */
+# endif
+#endif
 #define add_ssaaaa(sh, sl, ah, al, bh, bl) \
   __asm__ ("adds %1, %4, %5\n"                                          \
 	   "adc  %0, %2, %3"                                            \
@@ -193,7 +218,7 @@ extern UDItype __udiv_qrnnd ();
 	   : "%r" ((USItype)(ah)),                                      \
 	     "rI" ((USItype)(bh)),                                      \
 	     "%r" ((USItype)(al)),                                      \
-	     "rI" ((USItype)(bl)))
+	     "rI" ((USItype)(bl)) __CLOBBER_CC)
 #define sub_ddmmss(sh, sl, ah, al, bh, bl) \
   __asm__ ("subs %1, %4, %5\n"                                          \
 	   "sbc  %0, %2, %3"                                            \
@@ -202,8 +227,8 @@ extern UDItype __udiv_qrnnd ();
 	   : "r" ((USItype)(ah)),                                       \
 	     "rI" ((USItype)(bh)),                                      \
 	     "r" ((USItype)(al)),                                       \
-	     "rI" ((USItype)(bl)))
-#if defined __ARM_ARCH_2__ || defined __ARM_ARCH_3__
+	     "rI" ((USItype)(bl)) __CLOBBER_CC)
+#if (defined __ARM_ARCH && __ARM_ARCH <= 3)
 #define umul_ppmm(xh, xl, a, b) \
   __asm__ ("%@ Inlined umul_ppmm\n"                                     \
 	"mov	%|r0, %2, lsr #16		@ AAAA\n"               \
@@ -222,8 +247,8 @@ extern UDItype __udiv_qrnnd ();
 	     "=r" ((USItype)(xl))                                       \
 	   : "r" ((USItype)(a)),                                        \
 	     "r" ((USItype)(b))                                         \
-	   : "r0", "r1", "r2")
-#else
+	   : "r0", "r1", "r2" __CLOBBER_CC)
+#else /* __ARM_ARCH >= 4 */
 #define umul_ppmm(xh, xl, a, b)                                         \
   __asm__ ("%@ Inlined umul_ppmm\n"                                     \
 	   "umull %r1, %r0, %r2, %r3"                                   \
@@ -232,9 +257,15 @@ extern UDItype __udiv_qrnnd ();
 		   : "r" ((USItype)(a)),                                \
 		     "r" ((USItype)(b))                                 \
 		   : "r0", "r1")
-#endif
+#endif /* __ARM_ARCH >= 4 */
 #define UMUL_TIME 20
 #define UDIV_TIME 100
+#if (defined __ARM_ARCH && __ARM_ARCH >= 5)
+#define count_leading_zeros(count, x) \
+  __asm__ ("clz %0, %1"                                                 \
+		   : "=r" ((USItype)(count))                            \
+		   : "r" ((USItype)(x)))
+#endif /* __ARM_ARCH >= 5 */
 #endif /* __arm__ */
 
 /***************************************
@@ -442,7 +473,8 @@ extern USItype __udiv_qrnnd ();
 	   : "%0" ((USItype)(ah)),                                      \
 	     "g" ((USItype)(bh)),                                       \
 	     "%1" ((USItype)(al)),                                      \
-	     "g" ((USItype)(bl)))
+	     "g" ((USItype)(bl))                                        \
+	   __CLOBBER_CC)
 #define sub_ddmmss(sh, sl, ah, al, bh, bl) \
   __asm__ ("subl %5,%1\n"                                               \
 	   "sbbl %3,%0"                                                 \
@@ -451,29 +483,33 @@ extern USItype __udiv_qrnnd ();
 	   : "0" ((USItype)(ah)),                                       \
 	     "g" ((USItype)(bh)),                                       \
 	     "1" ((USItype)(al)),                                       \
-	     "g" ((USItype)(bl)))
+	     "g" ((USItype)(bl))                                        \
+	   __CLOBBER_CC)
 #define umul_ppmm(w1, w0, u, v) \
   __asm__ ("mull %3"                                                    \
 	   : "=a" ((USItype)(w0)),                                      \
 	     "=d" ((USItype)(w1))                                       \
 	   : "%0" ((USItype)(u)),                                       \
-	     "rm" ((USItype)(v)))
+	     "rm" ((USItype)(v))                                        \
+	   __CLOBBER_CC)
 #define udiv_qrnnd(q, r, n1, n0, d) \
   __asm__ ("divl %4"                                                    \
 	   : "=a" ((USItype)(q)),                                       \
 	     "=d" ((USItype)(r))                                        \
 	   : "0" ((USItype)(n0)),                                       \
 	     "1" ((USItype)(n1)),                                       \
-	     "rm" ((USItype)(d)))
+	     "rm" ((USItype)(d))                                        \
+	   __CLOBBER_CC)
 #define count_leading_zeros(count, x) \
   do {									\
     USItype __cbtmp;							\
     __asm__ ("bsrl %1,%0"                                               \
-	     : "=r" (__cbtmp) : "rm" ((USItype)(x)));                   \
+	     : "=r" (__cbtmp) : "rm" ((USItype)(x))                     \
+	     __CLOBBER_CC);						\
     (count) = __cbtmp ^ 31;						\
   } while (0)
 #define count_trailing_zeros(count, x) \
-  __asm__ ("bsfl %1,%0" : "=r" (count) : "rm" ((USItype)(x)))
+  __asm__ ("bsfl %1,%0" : "=r" (count) : "rm" ((USItype)(x)) __CLOBBER_CC)
 #ifndef UMUL_TIME
 #define UMUL_TIME 40
 #endif

@@ -20,7 +20,7 @@
 #ifndef G10_CIPHER_H
 #define G10_CIPHER_H
 
-#include <gcrypt.h>
+#include "gcrypt-int.h"
 
 #define DBG_CIPHER _gcry_get_debug_flag( 1 )
 
@@ -95,6 +95,19 @@ void _gcry_aes_ctr_enc (void *context, unsigned char *ctr,
                         void *outbuf_arg, const void *inbuf_arg,
                         unsigned int nblocks);
 
+/*-- blowfish.c --*/
+void _gcry_blowfish_cfb_dec (void *context, unsigned char *iv,
+			     void *outbuf_arg, const void *inbuf_arg,
+			     unsigned int nblocks);
+
+void _gcry_blowfish_cbc_dec (void *context, unsigned char *iv,
+			     void *outbuf_arg, const void *inbuf_arg,
+			     unsigned int nblocks);
+
+void _gcry_blowfish_ctr_enc (void *context, unsigned char *ctr,
+			     void *outbuf_arg, const void *inbuf_arg,
+			     unsigned int nblocks);
+
 /*-- cast5.c --*/
 void _gcry_cast5_cfb_dec (void *context, unsigned char *iv,
 			  void *outbuf_arg, const void *inbuf_arg,
@@ -127,6 +140,17 @@ void _gcry_serpent_cbc_dec (void *context, unsigned char *iv,
                             void *outbuf_arg, const void *inbuf_arg,
                             unsigned int nblocks);
 void _gcry_serpent_cfb_dec (void *context, unsigned char *iv,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
+
+/*-- twofish.c --*/
+void _gcry_twofish_ctr_enc (void *context, unsigned char *ctr,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
+void _gcry_twofish_cbc_dec (void *context, unsigned char *iv,
+                            void *outbuf_arg, const void *inbuf_arg,
+                            unsigned int nblocks);
+void _gcry_twofish_cfb_dec (void *context, unsigned char *iv,
                             void *outbuf_arg, const void *inbuf_arg,
                             unsigned int nblocks);
 

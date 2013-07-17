@@ -25,13 +25,14 @@
 #include <time.h>
 #include <stdarg.h>
 #ifdef _WIN32
+#include <winsock2.h>
 #include <windows.h>
 #else
 #include <sys/times.h>
 #endif
 
 #ifdef _GCRYPT_IN_LIBGCRYPT
-# include "../src/gcrypt.h"
+# include "../src/gcrypt-int.h"
 # include "../compat/libcompat.h"
 #else
 # include <gcrypt.h>

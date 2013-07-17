@@ -54,7 +54,7 @@ rmd.h
 
 EXTRA_libcipher_la_SOURCES = \
 arcfour.c \
-blowfish.c \
+blowfish.c blowfish-amd64.S \
 cast5.c cast5-amd64.S \
 crc.c \
 des.c \
@@ -66,20 +66,21 @@ gost28147.c \
 gost3411-94.c \
 md4.c \
 md5.c \
-rijndael.c rijndael-tables.h \
+rijndael.c rijndael-tables.h rijndael-amd64.S \
 rmd160.c \
 rsa.c \
 scrypt.c \
 seed.c \
-serpent.c serpent-sse2-amd64.S \
+serpent.c serpent-sse2-amd64.S serpent-avx2-amd64.S \
 sha1.c \
 sha256.c \
 sha512.c \
 tiger.c \
 whirlpool.c \
-twofish.c \
+twofish.c twofish-amd64.S \
 rfc2268.c \
-camellia.c camellia.h camellia-glue.c camellia-aesni-avx-amd64.S
+camellia.c camellia.h camellia-glue.c camellia-aesni-avx-amd64.S \
+  camellia-aesni-avx2-amd64.S
 
 if ENABLE_O_FLAG_MUNGING
 o_flag_munging = sed -e 's/-O\([2-9s][2-9s]*\)/-O1/' -e 's/-Ofast/-O1/g'

@@ -47,7 +47,7 @@
 
 /* USE_AMD64_ASM indicates whether to use AMD64 assembly code. */
 #undef USE_AMD64_ASM
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(HAVE_COMPATIBLE_GCC_AMD64_PLATFORM_AS)
 # define USE_AMD64_ASM 1
 #endif
 
@@ -393,7 +393,8 @@ rol(int n, u32 x)
 {
 	__asm__("roll %%cl,%0"
 		:"=r" (x)
-		:"0" (x),"c" (n));
+		:"0" (x),"c" (n)
+		:"cc");
 	return x;
 }
 #else
