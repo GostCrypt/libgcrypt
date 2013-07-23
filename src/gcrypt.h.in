@@ -423,6 +423,13 @@ gcry_sexp_t gcry_sexp_cadr (const gcry_sexp_t list);
 const char *gcry_sexp_nth_data (const gcry_sexp_t list, int number,
                                 size_t *datalen);
 
+/* This function is used to get data from a LIST.  A malloced buffer to the
+   data with index NUMBER is returned and the length of this
+   data will be stored to RLENGTH.  If there is no data at the given
+   index or the index represents another list, `NULL' is returned.  */
+void *gcry_sexp_nth_buffer (const gcry_sexp_t list, int number,
+                            size_t *rlength);
+
 /* This function is used to get and convert data from a LIST.  The
    data is assumed to be a Nul terminated string.  The caller must
    release the returned value using `gcry_free'.  If there is no data
@@ -680,7 +687,7 @@ void     gcry_mpi_rshift (gcry_mpi_t x, gcry_mpi_t a, unsigned int n);
 void     gcry_mpi_lshift (gcry_mpi_t x, gcry_mpi_t a, unsigned int n);
 
 /* Store NBITS of the value P points to in A and mark A as an opaque
-   value.  WARNING: Never use an opaque MPI for anything thing else then
+   value.  WARNING: Never use an opaque MPI for anything thing else than
    gcry_mpi_release, gcry_mpi_get_opaque. */
 gcry_mpi_t gcry_mpi_set_opaque (gcry_mpi_t a, void *p, unsigned int nbits);
 
@@ -813,7 +820,8 @@ enum gcry_cipher_algos
     GCRY_CIPHER_CAMELLIA128 = 310,
     GCRY_CIPHER_CAMELLIA192 = 311,
     GCRY_CIPHER_CAMELLIA256 = 312,
-    GCRY_CIPHER_GOST28147   = 313,
+    GCRY_CIPHER_SALSA20     = 313,
+    GCRY_CIPHER_GOST28147   = 314,
   };
 
 /* The Rijndael algorithm is basically AES, so provide some macros. */

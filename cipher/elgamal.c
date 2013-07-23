@@ -753,12 +753,18 @@ elg_decrypt (int algo, gcry_mpi_t *result,
 
 
 static gcry_err_code_t
-elg_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey)
+elg_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
+          int flags, int hashalgo)
 {
   gcry_err_code_t err = GPG_ERR_NO_ERROR;
   ELG_secret_key sk;
 
   (void)algo;
+  (void)flags;
+  (void)hashalgo;
+
+  if (mpi_is_opaque (data))
+    return GPG_ERR_INV_DATA;
 
   if ((! data)
       || (! skey[0]) || (! skey[1]) || (! skey[2]) || (! skey[3]))
@@ -788,6 +794,9 @@ elg_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
   (void)algo;
   (void)cmp;
   (void)opaquev;
+
+  if (mpi_is_opaque (hash))
+    return GPG_ERR_INV_DATA;
 
   if ((! data[0]) || (! data[1]) || (! hash)
       || (! pkey[0]) || (! pkey[1]) || (! pkey[2]))

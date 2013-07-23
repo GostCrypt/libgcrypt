@@ -700,7 +700,7 @@ stronger_key_check ( RSA_secret_key *skey )
  * Where m is OUTPUT, c is INPUT and d,n,p,q,u are elements of SKEY.
  */
 static void
-secret(gcry_mpi_t output, gcry_mpi_t input, RSA_secret_key *skey )
+secret (gcry_mpi_t output, gcry_mpi_t input, RSA_secret_key *skey )
 {
   if (!skey->p || !skey->q || !skey->u)
     {
@@ -993,11 +993,17 @@ rsa_decrypt (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
 
 
 static gcry_err_code_t
-rsa_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey)
+rsa_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
+          int flags, int hashalgo)
 {
   RSA_secret_key sk;
 
   (void)algo;
+  (void)flags;
+  (void)hashalgo;
+
+  if (mpi_is_opaque (data))
+    return GPG_ERR_INV_DATA;
 
   sk.n = skey[0];
   sk.e = skey[1];
@@ -1024,6 +1030,9 @@ rsa_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
   (void)algo;
   (void)cmp;
   (void)opaquev;
+
+  if (mpi_is_opaque (hash))
+    return GPG_ERR_INV_DATA;
 
   pk.n = pkey[0];
   pk.e = pkey[1];
