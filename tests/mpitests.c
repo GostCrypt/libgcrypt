@@ -143,6 +143,23 @@ test_const_and_immutable (void)
   if (!gcry_mpi_get_flag (one, GCRYMPI_FLAG_CONST))
     die ("const flag unexpectly cleared\n");
 
+
+  second_one = gcry_mpi_set (NULL, GCRYMPI_CONST_ONE);
+  if (gcry_mpi_get_flag (second_one, GCRYMPI_FLAG_IMMUTABLE))
+    die ("immutable flag not cleared by mpi_set (NULL,x)\n");
+  if (gcry_mpi_get_flag (second_one, GCRYMPI_FLAG_CONST))
+    die ("const flag not cleared by mpi_set (NULL,x)\n");
+  gcry_mpi_release (second_one);
+
+  second_one = gcry_mpi_set_ui (NULL, 42);
+  gcry_mpi_set (second_one, GCRYMPI_CONST_ONE);
+  if (gcry_mpi_get_flag (second_one, GCRYMPI_FLAG_IMMUTABLE))
+    die ("immutable flag not cleared after mpi_set (a,x)\n");
+  if (gcry_mpi_get_flag (second_one, GCRYMPI_FLAG_CONST))
+    die ("const flag not cleared mpi_set (a,x)\n");
+  gcry_mpi_release (second_one);
+
+
   /* Due to the the constant flag the release below should be a NOP
      and will leak memory.  */
   gcry_mpi_release (one);
@@ -362,6 +379,10 @@ test_powm (void)
   if (gcry_mpi_cmp (res, base))
     die ("test_powm failed at %d\n", __LINE__);
 
+  gcry_mpi_release (base);
+  gcry_mpi_release (exp);
+  gcry_mpi_release (mod);
+  gcry_mpi_release (res);
   /* Fixme: We should add the rest of the cases of course.  */
 
 

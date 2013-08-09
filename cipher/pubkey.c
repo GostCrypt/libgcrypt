@@ -1899,8 +1899,8 @@ sexp_elements_extract (gcry_sexp_t key_sexp, const char *element_names,
   if (!err)
     {
       /* Check that all elements are available.  */
-      for (name = element_names, idx = 0; *name; name++, idx++)
-        if (!elements[idx])
+      for (name = element_names, i = 0; *name; name++, i++)
+        if (!elements[i])
           break;
       if (*name)
         {
@@ -1924,7 +1924,7 @@ sexp_elements_extract (gcry_sexp_t key_sexp, const char *element_names,
     {
       for (i = 0; i < idx; i++)
         if (elements[i])
-          gcry_free (elements[i]);
+          mpi_free (elements[i]);
     }
   return err;
 }
@@ -2030,7 +2030,7 @@ sexp_elements_extract_ecc (gcry_sexp_t key_sexp, const char *element_names,
     {
       for (name = element_names, idx = 0; *name; name++, idx++)
         if (elements[idx])
-          gcry_free (elements[idx]);
+          mpi_free (elements[idx]);
     }
   return err;
 }
@@ -3420,7 +3420,16 @@ gcry_pk_sign (gcry_sexp_t *r_sig, gcry_sexp_t s_hash, gcry_sexp_t s_skey)
  leave:
   if (skey)
     {
-      release_mpi_array (skey);
+      if (is_ecc)
+        /* Q is optional and may be NULL, while there is D after Q.  */
+        for (i = 0; i < 7; i++)
+          {
+            if (skey[i])
+              mpi_free (skey[i]);
+            skey[i] = NULL;
+          }
+      else
+        release_mpi_array (skey);
       gcry_free (skey);
     }
 
