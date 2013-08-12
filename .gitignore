@@ -1,8 +1,11 @@
 *.lo
 *.o
 *.orig
+*.patch
+*.swp
 .deps/
 .libs/
+gmon.out
 po/*.gmo
 po/messages.mo
 /aclocal.m4
@@ -93,6 +96,7 @@ tests/aeswrap
 tests/basic
 tests/benchmark
 tests/curves
+tests/dsa-rfc6979
 tests/fips186-dsa
 tests/fipsdrv
 tests/hmac
@@ -110,3 +114,5 @@ tests/t-mpi-bit
 tests/t-mpi-point
 tests/tsexp
 tests/version
+tests/*.log
+tests/*.trs
