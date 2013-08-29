@@ -964,6 +964,57 @@ if test "$gcry_cv_gcc_amd64_platform_as_ok" = "yes" ; then
 fi
 
 
+#
+# Check whether compiler is configured for ARMv6 or newer architecture
+#
+AC_CACHE_CHECK([whether compiler is configured for ARMv6 or newer architecture],
+       [gcry_cv_cc_arm_arch_is_v6],
+       [AC_EGREP_CPP(yes,
+          [#if defined(__arm__) && \
+             ((defined(__ARM_ARCH) && __ARM_ARCH >= 6) \
+             || defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
+             || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) \
+             || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6T2__) \
+             || defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) \
+             || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) \
+             || defined(__ARM_ARCH_7EM__))
+            yes
+           #endif
+          ], gcry_cv_cc_arm_arch_is_v6=yes, gcry_cv_cc_arm_arch_is_v6=no)])
+if test "$gcry_cv_cc_arm_arch_is_v6" = "yes" ; then
+   AC_DEFINE(HAVE_ARM_ARCH_V6,1,
+     [Defined if ARM architecture is v6 or newer])
+fi
+
+
+#
+# Check whether GCC assembler supports features needed for our ARM
+# implementations
+#
+AC_CACHE_CHECK([whether GCC assembler is compatible for ARM assembly implementations],
+       [gcry_cv_gcc_arm_platform_as_ok],
+       [gcry_cv_gcc_arm_platform_as_ok=no
+        AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+          [[__asm__(
+                /* Test if assembler supports UAL syntax.  */
+                ".syntax unified\n\t"
+                ".thumb\n\t" /* thumb-2 in UAL, thumb-1 otherwise.  */
+                ".code 16\n\t"
+                /* Following causes error if assembler ignored '.syntax unified'.  */
+                "asmfunc:\n\t"
+                "add.w %r0, %r4, %r8, ror #12;\n\t"
+
+                /* Test if '.type' and '.size' are supported.  */
+                ".size asmfunc,.-asmfunc;\n\t"
+                ".type asmfunc,%function;\n\t"
+            );]])],
+          [gcry_cv_gcc_arm_platform_as_ok=yes])])
+if test "$gcry_cv_gcc_arm_platform_as_ok" = "yes" ; then
+   AC_DEFINE(HAVE_COMPATIBLE_GCC_ARM_PLATFORM_AS,1,
+     [Defined if underlying assembler is compatible with ARM assembly implementations])
+fi
+
+
 #######################################
 #### Checks for library functions. ####
 #######################################
@@ -1252,6 +1303,10 @@ if test "$found" = "1" ; then
          # Build with the assembly implementation
          GCRYPT_CIPHERS="$GCRYPT_CIPHERS blowfish-amd64.lo"
       ;;
+      arm*-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS blowfish-armv6.lo"
+      ;;
    esac
 fi
 
@@ -1264,6 +1319,10 @@ if test "$found" = "1" ; then
       x86_64-*-*)
          # Build with the assembly implementation
          GCRYPT_CIPHERS="$GCRYPT_CIPHERS cast5-amd64.lo"
+      ;;
+      arm*-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS cast5-armv6.lo"
       ;;
    esac
 fi
@@ -1283,6 +1342,10 @@ if test "$found" = "1" ; then
       x86_64-*-*)
          # Build with the assembly implementation
          GCRYPT_CIPHERS="$GCRYPT_CIPHERS rijndael-amd64.lo"
+      ;;
+      arm*-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS rijndael-armv6.lo"
       ;;
    esac
 fi
@@ -1334,6 +1397,13 @@ LIST_MEMBER(camellia, $enabled_ciphers)
 if test "$found" = "1" ; then
    GCRYPT_CIPHERS="$GCRYPT_CIPHERS camellia.lo camellia-glue.lo"
    AC_DEFINE(USE_CAMELLIA, 1, [Defined if this module should be included])
+
+   case "${host}" in
+      arm*-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS camellia-armv6.lo"
+      ;;
+   esac
 
    if test x"$avxsupport" = xyes ; then
       if test x"$aesnisupport" = xyes ; then

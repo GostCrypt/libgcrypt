@@ -50,6 +50,13 @@
 # define USE_AMD64_ASM 1
 #endif
 
+/* USE_ARMV6_ASM indicates whether to use ARMv6 assembly code. */
+#undef USE_ARMV6_ASM
+#if defined(HAVE_ARM_ARCH_V6) && defined(__ARMEL__)
+# if (BLOWFISH_ROUNDS == 16) && defined(HAVE_COMPATIBLE_GCC_ARM_PLATFORM_AS)
+#  define USE_ARMV6_ASM 1
+# endif
+#endif
 
 typedef struct {
     u32 s0[256];
@@ -305,7 +312,61 @@ static void decrypt_block (void *context, byte *outbuf, const byte *inbuf)
   _gcry_burn_stack (2*8);
 }
 
-#else /*USE_AMD64_ASM*/
+#elif defined(USE_ARMV6_ASM)
+
+/* Assembly implementations of Blowfish. */
+extern void _gcry_blowfish_armv6_do_encrypt(BLOWFISH_context *c, u32 *ret_xl,
+					    u32 *ret_xr);
+
+extern void _gcry_blowfish_armv6_encrypt_block(BLOWFISH_context *c, byte *out,
+					       const byte *in);
+
+extern void _gcry_blowfish_armv6_decrypt_block(BLOWFISH_context *c, byte *out,
+					       const byte *in);
+
+/* These assembly implementations process two blocks in parallel. */
+extern void _gcry_blowfish_armv6_ctr_enc(BLOWFISH_context *ctx, byte *out,
+					 const byte *in, byte *ctr);
+
+extern void _gcry_blowfish_armv6_cbc_dec(BLOWFISH_context *ctx, byte *out,
+					 const byte *in, byte *iv);
+
+extern void _gcry_blowfish_armv6_cfb_dec(BLOWFISH_context *ctx, byte *out,
+					 const byte *in, byte *iv);
+
+static void
+do_encrypt ( BLOWFISH_context *bc, u32 *ret_xl, u32 *ret_xr )
+{
+  _gcry_blowfish_armv6_do_encrypt (bc, ret_xl, ret_xr);
+}
+
+static void
+do_encrypt_block (BLOWFISH_context *context, byte *outbuf, const byte *inbuf)
+{
+  _gcry_blowfish_armv6_encrypt_block (context, outbuf, inbuf);
+}
+
+static void
+do_decrypt_block (BLOWFISH_context *context, byte *outbuf, const byte *inbuf)
+{
+  _gcry_blowfish_armv6_decrypt_block (context, outbuf, inbuf);
+}
+
+static void encrypt_block (void *context , byte *outbuf, const byte *inbuf)
+{
+  BLOWFISH_context *c = (BLOWFISH_context *) context;
+  do_encrypt_block (c, outbuf, inbuf);
+  _gcry_burn_stack (10*4);
+}
+
+static void decrypt_block (void *context, byte *outbuf, const byte *inbuf)
+{
+  BLOWFISH_context *c = (BLOWFISH_context *) context;
+  do_decrypt_block (c, outbuf, inbuf);
+  _gcry_burn_stack (10*4);
+}
+
+#else /*USE_ARMV6_ASM*/
 
 #if BLOWFISH_ROUNDS != 16
 static inline u32
@@ -527,7 +588,7 @@ decrypt_block (void *context, byte *outbuf, const byte *inbuf)
   _gcry_burn_stack (64);
 }
 
-#endif /*!USE_AMD64_ASM*/
+#endif /*!USE_AMD64_ASM&&!USE_ARMV6_ASM*/
 
 
 /* Bulk encryption of complete blocks in CTR mode.  This function is only
@@ -557,6 +618,21 @@ _gcry_blowfish_ctr_enc(void *context, unsigned char *ctr, void *outbuf_arg,
         nblocks -= 4;
         outbuf += 4 * BLOWFISH_BLOCKSIZE;
         inbuf  += 4 * BLOWFISH_BLOCKSIZE;
+      }
+
+    /* Use generic code to handle smaller chunks... */
+    /* TODO: use caching instead? */
+  }
+#elif defined(USE_ARMV6_ASM)
+  {
+    /* Process data in 2 block chunks. */
+    while (nblocks >= 2)
+      {
+        _gcry_blowfish_armv6_ctr_enc(ctx, outbuf, inbuf, ctr);
+
+        nblocks -= 2;
+        outbuf += 2 * BLOWFISH_BLOCKSIZE;
+        inbuf  += 2 * BLOWFISH_BLOCKSIZE;
       }
 
     /* Use generic code to handle smaller chunks... */
@@ -615,6 +691,20 @@ _gcry_blowfish_cbc_dec(void *context, unsigned char *iv, void *outbuf_arg,
 
     /* Use generic code to handle smaller chunks... */
   }
+#elif defined(USE_ARMV6_ASM)
+  {
+    /* Process data in 2 block chunks. */
+    while (nblocks >= 2)
+      {
+        _gcry_blowfish_armv6_cbc_dec(ctx, outbuf, inbuf, iv);
+
+        nblocks -= 2;
+        outbuf += 2 * BLOWFISH_BLOCKSIZE;
+        inbuf  += 2 * BLOWFISH_BLOCKSIZE;
+      }
+
+    /* Use generic code to handle smaller chunks... */
+  }
 #endif
 
   for ( ;nblocks; nblocks-- )
@@ -660,6 +750,20 @@ _gcry_blowfish_cfb_dec(void *context, unsigned char *iv, void *outbuf_arg,
         nblocks -= 4;
         outbuf += 4 * BLOWFISH_BLOCKSIZE;
         inbuf  += 4 * BLOWFISH_BLOCKSIZE;
+      }
+
+    /* Use generic code to handle smaller chunks... */
+  }
+#elif defined(USE_ARMV6_ASM)
+  {
+    /* Process data in 2 block chunks. */
+    while (nblocks >= 2)
+      {
+        _gcry_blowfish_armv6_cfb_dec(ctx, outbuf, inbuf, iv);
+
+        nblocks -= 2;
+        outbuf += 2 * BLOWFISH_BLOCKSIZE;
+        inbuf  += 2 * BLOWFISH_BLOCKSIZE;
       }
 
     /* Use generic code to handle smaller chunks... */
