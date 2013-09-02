@@ -1512,8 +1512,12 @@ fi
 
 LIST_MEMBER(gostr3411-94, $enabled_digests)
 if test "$found" = "1" ; then
-   GCRYPT_DIGESTS="$GCRYPT_DIGESTS gostr3411-94.lo"
-   AC_DEFINE(USE_GOST_R_3411_94, 1, [Defined if this module should be included])
+   # GOST R 34.11-94 internally uses GOST 28147-89
+   LIST_MEMBER(gost28147, $enabled_ciphers)
+   if test "$found" = "1" ; then
+      GCRYPT_DIGESTS="$GCRYPT_DIGESTS gostr3411-94.lo"
+      AC_DEFINE(USE_GOST_R_3411_94, 1, [Defined if this module should be included])
+   fi
 fi
 
 LIST_MEMBER(stribog, $enabled_digests)

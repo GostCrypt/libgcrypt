@@ -161,7 +161,7 @@ do_hash_step (GOST28147_context *hd, unsigned char *h, unsigned char *m)
   for (i = 0; i < 4; i++) {
     do_p (k, u, v);
 
-    gost_enc_one (hd, k, s + i*8, h + i*8);
+    _gcry_gost_enc_one (hd, k, s + i*8, h + i*8);
 
     do_a (u);
     if (i == 1)

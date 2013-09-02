@@ -40,7 +40,8 @@ libcipher_la_LIBADD = $(GCRYPT_MODULES)
 libcipher_la_SOURCES = \
 cipher.c cipher-internal.h \
 cipher-cbc.c cipher-cfb.c cipher-ofb.c cipher-ctr.c cipher-aeswrap.c \
-cipher-ofbgost.c cipher-selftest.c cipher-selftest.h \
+cipher-ofbgost.c \
+cipher-selftest.c cipher-selftest.h \
 pubkey.c pubkey-internal.h \
 md.c \
 kdf.c kdf-internal.h \
@@ -62,8 +63,8 @@ dsa.c \
 elgamal.c \
 ecc.c ecc-curves.c ecc-misc.c ecc-common.h \
 idea.c \
-gost28147.c \
-gost3411-94.c \
+gost28147.c gost.h \
+gostr3411-94.c \
 md4.c \
 md5.c \
 rijndael.c rijndael-tables.h rijndael-amd64.S rijndael-armv6.S \
@@ -76,6 +77,7 @@ serpent.c serpent-sse2-amd64.S serpent-avx2-amd64.S \
 sha1.c \
 sha256.c \
 sha512.c sha512-armv7-neon.S \
+stribog.c \
 tiger.c \
 whirlpool.c \
 twofish.c twofish-amd64.S \

@@ -39,7 +39,7 @@
 
 /* This is an s-box from RFC4357, named GostR3411-94-TestParamSet
  * For now it is the only s-box supported, as libgcrypt lacks mechanism
- * to pass parameters to cipher in a usefull way */
+ * for passing parameters to cipher in a usefull way. */
 unsigned char test_sbox[16 * 8] = {
   0x4, 0xE, 0x5, 0x7, 0x6, 0x4, 0xD, 0x1,
   0xA, 0xB, 0x8, 0xD, 0xC, 0xB, 0xB, 0xF,
@@ -157,7 +157,7 @@ gost_encrypt_block (void *c, byte *outbuf, const byte *inbuf)
   outbuf[3 + 4] = (n1 >> (3 * 8)) & 0xff;
 }
 
-void gost_enc_one (GOST28147_context *c, const byte *key,
+void _gcry_gost_enc_one (GOST28147_context *c, const byte *key,
     byte *out, byte *in)
 {
   gost_setkey (c, key, 32);

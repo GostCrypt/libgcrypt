@@ -1641,7 +1641,6 @@ encryption' mode. Internally it looks like plain OFB with small
 additional transmutation on cryptostream. This mode may be used
 with any 64 bit block length algorithm.
 
-
 @end table
 
 @node Working with cipher handles
@@ -2951,9 +2950,17 @@ cryptographic sense.
 This is the Whirlpool algorithm which yields a message digest of 64
 bytes.
 
-@item GCRY_MD_GOST3411
+@item GCRY_MD_GOSTR3411_94
 This is the hash algorithm described in GOST R 34.11-94. It yields
-messag digest of 32 bytes.
+message digest of 32 bytes.
+
+@item GCRY_MD_GOSTR3411_12_256
+This is the 256-bit version of hash algorithm described in GOST R 34.11-2012
+which yields message digests of 32 bytes.
+
+@item GCRY_MD_GOSTR3411_12_512
+This is the 512-bit version of hash algorithm described in GOST R 34.11-2012
+which yields message digests of 64 bytes.
 
 @end table
 @c end table of hash algorithms
