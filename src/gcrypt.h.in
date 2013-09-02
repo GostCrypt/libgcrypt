@@ -1067,7 +1067,7 @@ enum gcry_md_algos
     GCRY_MD_WHIRLPOOL = 305,
     GCRY_MD_TIGER1  = 306, /* TIGER fixed.  */
     GCRY_MD_TIGER2  = 307, /* TIGER2 variant.   */
-    GCRY_MD_GOST3411_94 = 308, /* GOST 34.11-94. */
+    GCRY_MD_GOSTR3411_94 = 308, /* GOST R 34.11-94. */
   };
 
 /* Flags used with the open function.  */

@@ -1,4 +1,4 @@
-/* gost3411.c - GOST R 34.11-94 hash function
+/* gostr3411-94.c - GOST R 34.11-94 hash function
  * Copyright (C) 2012 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
@@ -36,7 +36,7 @@ typedef struct {
   byte h[32];
   byte sigma[32];
   u32 len;
-} GOST3411_CONTEXT;
+} GOSTR3411_CONTEXT;
 
 static void
 transform (void *c, const unsigned char *data);
@@ -44,7 +44,7 @@ transform (void *c, const unsigned char *data);
 static void
 gost3411_init (void *context)
 {
-  GOST3411_CONTEXT *hd = context;
+  GOSTR3411_CONTEXT *hd = context;
 
   memset (&hd->hd, 0, sizeof(hd->hd));
   memset (hd->h, 0, 32);
@@ -204,7 +204,7 @@ do_hash_step (GOST28147_context *hd, unsigned char *h, unsigned char *m)
 static void
 transform (void *ctx, const unsigned char *data)
 {
-  GOST3411_CONTEXT *hd = ctx;
+  GOSTR3411_CONTEXT *hd = ctx;
   byte m[32];
 
   memcpy (m, data, 32);
@@ -220,7 +220,7 @@ transform (void *ctx, const unsigned char *data)
 static void
 gost3411_final (void *context)
 {
-  GOST3411_CONTEXT *hd = context;
+  GOSTR3411_CONTEXT *hd = context;
   size_t padlen = 0;
   byte l[32];
   int i;
@@ -259,13 +259,13 @@ gost3411_final (void *context)
 static byte *
 gost3411_read (void *context)
 {
-  GOST3411_CONTEXT *hd = context;
+  GOSTR3411_CONTEXT *hd = context;
 
   return hd->h;
 }
 gcry_md_spec_t _gcry_digest_spec_gost3411_94 =
   {
-    "GOST34.11-94", NULL, 0, NULL, 32,
+    "GOST_R_34.11-94", NULL, 0, NULL, 32,
     gost3411_init, _gcry_md_block_write, gost3411_final, gost3411_read,
-    sizeof (GOST3411_CONTEXT)
+    sizeof (GOSTR3411_CONTEXT)
   };
