@@ -109,6 +109,7 @@ tests/pubkey
 tests/random
 tests/register
 tests/rsacvt
+tests/t-convert
 tests/t-kdf
 tests/t-mpi-bit
 tests/t-mpi-point
