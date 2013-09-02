@@ -60,7 +60,7 @@ crc.c \
 des.c \
 dsa.c \
 elgamal.c \
-ecc.c \
+ecc.c ecc-curves.c ecc-misc.c ecc-common.h \
 idea.c \
 gost28147.c \
 gost3411-94.c \
@@ -75,7 +75,7 @@ seed.c \
 serpent.c serpent-sse2-amd64.S serpent-avx2-amd64.S \
 sha1.c \
 sha256.c \
-sha512.c \
+sha512.c sha512-armv7-neon.S \
 tiger.c \
 whirlpool.c \
 twofish.c twofish-amd64.S \
