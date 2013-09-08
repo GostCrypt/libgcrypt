@@ -77,12 +77,11 @@ static void *progress_cb_data;
 /* Local prototypes. */
 static void test_keys (ECC_secret_key * sk, unsigned int nbits);
 static int check_secret_key (ECC_secret_key * sk);
-static gpg_err_code_t sign (gcry_mpi_t input, ECC_secret_key *skey,
-                            gcry_mpi_t r, gcry_mpi_t s,
-                            int flags, int hashalgo);
-static gpg_err_code_t verify (gcry_mpi_t input, ECC_public_key *pkey,
-                              gcry_mpi_t r, gcry_mpi_t s);
-
+static gpg_err_code_t sign_ecdsa (gcry_mpi_t input, ECC_secret_key *skey,
+                                  gcry_mpi_t r, gcry_mpi_t s,
+                                  int flags, int hashalgo);
+static gpg_err_code_t verify_ecdsa (gcry_mpi_t input, ECC_public_key *pkey,
+                                    gcry_mpi_t r, gcry_mpi_t s);
 
 static gcry_mpi_t gen_y_2 (gcry_mpi_t x, elliptic_curve_t * base);
 
@@ -108,8 +107,8 @@ _gcry_register_pk_ecc_progress (void (*cb) (void *, const char *,
 
 
 
-/****************
- * Solve the right side of the equation that defines a curve.
+/*
+ * Solve the right side of the Weierstrass equation.
  */
 static gcry_mpi_t
 gen_y_2 (gcry_mpi_t x, elliptic_curve_t *base)
@@ -158,6 +157,7 @@ generate_key (ECC_secret_key *sk, unsigned int nbits, const char *name,
 
   if (DBG_CIPHER)
     {
+      log_debug ("ecgen curve model: %s\n", _gcry_ecc_model2str (E.model));
       log_mpidump ("ecgen curve  p", E.p);
       log_mpidump ("ecgen curve  a", E.a);
       log_mpidump ("ecgen curve  b", E.b);
@@ -166,7 +166,7 @@ generate_key (ECC_secret_key *sk, unsigned int nbits, const char *name,
       log_mpidump ("ecgen curve Gy", E.G.y);
       log_mpidump ("ecgen curve Gz", E.G.z);
       if (E.name)
-        log_debug   ("ecgen curve used: %s\n", E.name);
+        log_debug ("ecgen curve used: %s\n", E.name);
     }
 
   random_level = transient_key ? GCRY_STRONG_RANDOM : GCRY_VERY_STRONG_RANDOM;
@@ -174,10 +174,11 @@ generate_key (ECC_secret_key *sk, unsigned int nbits, const char *name,
 
   /* Compute Q.  */
   point_init (&Q);
-  ctx = _gcry_mpi_ec_p_internal_new (E.p, E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (E.model, E.p, E.a, E.b);
   _gcry_mpi_ec_mul_point (&Q, sk->d, &E.G, ctx);
 
   /* Copy the stuff to the key structures. */
+  sk->E.model = E.model;
   sk->E.p = mpi_copy (E.p);
   sk->E.a = mpi_copy (E.a);
   sk->E.b = mpi_copy (E.b);
@@ -283,10 +284,10 @@ test_keys (ECC_secret_key *sk, unsigned int nbits)
 
   gcry_mpi_randomize (test, nbits, GCRY_WEAK_RANDOM);
 
-  if (sign (test, sk, r, s, 0, 0) )
+  if (sign_ecdsa (test, sk, r, s, 0, 0) )
     log_fatal ("ECDSA operation: sign failed\n");
 
-  if (verify (test, &pk, r, s))
+  if (verify_ecdsa (test, &pk, r, s))
     {
       log_fatal ("ECDSA operation: sign, verify failed\n");
     }
@@ -343,7 +344,7 @@ check_secret_key (ECC_secret_key * sk)
       goto leave;
     }
 
-  ctx = _gcry_mpi_ec_p_internal_new (sk->E.p, sk->E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (sk->E.model, sk->E.p, sk->E.a, sk->E.b);
 
   _gcry_mpi_ec_mul_point (&Q, sk->E.n, &sk->E.G, ctx);
   if (mpi_cmp_ui (Q.z, 0))
@@ -410,13 +411,13 @@ check_secret_key (ECC_secret_key * sk)
 }
 
 
-/*
+/* Compute an ECDSA signature.
  * Return the signature struct (r,s) from the message hash.  The caller
  * must have allocated R and S.
  */
 static gpg_err_code_t
-sign (gcry_mpi_t input, ECC_secret_key *skey, gcry_mpi_t r, gcry_mpi_t s,
-      int flags, int hashalgo)
+sign_ecdsa (gcry_mpi_t input, ECC_secret_key *skey, gcry_mpi_t r, gcry_mpi_t s,
+            int flags, int hashalgo)
 {
   gpg_err_code_t err = 0;
   int extraloops = 0;
@@ -457,7 +458,8 @@ sign (gcry_mpi_t input, ECC_secret_key *skey, gcry_mpi_t r, gcry_mpi_t s,
   mpi_set_ui (s, 0);
   mpi_set_ui (r, 0);
 
-  ctx = _gcry_mpi_ec_p_internal_new (skey->E.p, skey->E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (skey->E.model,
+                                     skey->E.p, skey->E.a, skey->E.b);
 
   while (!mpi_cmp_ui (s, 0)) /* s == 0 */
     {
@@ -531,11 +533,12 @@ sign (gcry_mpi_t input, ECC_secret_key *skey, gcry_mpi_t r, gcry_mpi_t s,
 }
 
 
-/*
+/* Verify an ECDSA signature.
  * Check if R and S verifies INPUT.
  */
 static gpg_err_code_t
-verify (gcry_mpi_t input, ECC_public_key *pkey, gcry_mpi_t r, gcry_mpi_t s)
+verify_ecdsa (gcry_mpi_t input, ECC_public_key *pkey,
+              gcry_mpi_t r, gcry_mpi_t s)
 {
   gpg_err_code_t err = 0;
   gcry_mpi_t h, h1, h2, x;
@@ -555,7 +558,8 @@ verify (gcry_mpi_t input, ECC_public_key *pkey, gcry_mpi_t r, gcry_mpi_t s)
   point_init (&Q1);
   point_init (&Q2);
 
-  ctx = _gcry_mpi_ec_p_internal_new (pkey->E.p, pkey->E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (pkey->E.model,
+                                     pkey->E.p, pkey->E.a, pkey->E.b);
 
   /* h  = s^(-1) (mod n) */
   mpi_invm (h, s, pkey->E.n);
@@ -610,6 +614,59 @@ verify (gcry_mpi_t input, ECC_public_key *pkey, gcry_mpi_t r, gcry_mpi_t s)
   mpi_free (h1);
   mpi_free (h);
   return err;
+}
+
+
+
+/* Compute an EdDSA signature. See:
+ *   [ed25519] 23pp. (PDF) Daniel J. Bernstein, Niels Duif, Tanja
+ *   Lange, Peter Schwabe, Bo-Yin Yang. High-speed high-security
+ *   signatures.  Journal of Cryptographic Engineering 2 (2012), 77-89.
+ *   Document ID: a1a62a2f76d23f65d622484ddd09caf8.
+ *   URL: http://cr.yp.to/papers.html#ed25519. Date: 2011.09.26.
+ *
+ * Despite that this function requires the specification of a hash
+ * algorithm, we only support what has been specified by the paper.
+ * This may change in the future.  Note that we don't check the used
+ * curve; the user is responsible to use Ed25519.
+ *
+ * Return the signature struct (r,s) from the message hash.  The caller
+ * must have allocated R and S.
+ */
+static gpg_err_code_t
+sign_eddsa (gcry_mpi_t input, ECC_secret_key *skey,
+            gcry_mpi_t r, gcry_mpi_t s, int hashalgo)
+{
+  (void)skey;
+  (void)r;
+  (void)s;
+
+  if (!mpi_is_opaque (input))
+    return GPG_ERR_INV_DATA;
+  if (hashalgo != GCRY_MD_SHA512)
+    return GPG_ERR_DIGEST_ALGO;
+
+  return GPG_ERR_NOT_IMPLEMENTED;
+}
+
+
+/* Verify an EdDSA signature.  See sign_eddsa for the reference.
+ * Check if R and S verifies INPUT.
+ */
+static gpg_err_code_t
+verify_eddsa (gcry_mpi_t input, ECC_public_key *pkey,
+              gcry_mpi_t r, gcry_mpi_t s, int hashalgo)
+{
+  (void)pkey;
+  (void)r;
+  (void)s;
+
+  if (!mpi_is_opaque (input))
+    return GPG_ERR_INV_DATA;
+  if (hashalgo != GCRY_MD_SHA512)
+    return GPG_ERR_DIGEST_ALGO;
+
+  return GPG_ERR_NOT_IMPLEMENTED;
 }
 
 
@@ -696,6 +753,7 @@ ecc_generate_ext (int algo, unsigned int nbits, unsigned long evalue,
 
   if (DBG_CIPHER)
     {
+      log_debug ("ecgen result model: %s\n", _gcry_ecc_model2str (sk.E.model));
       log_mpidump ("ecgen result p", skey[0]);
       log_mpidump ("ecgen result a", skey[1]);
       log_mpidump ("ecgen result b", skey[2]);
@@ -731,6 +789,7 @@ ecc_check_secret_key (int algo, gcry_mpi_t *skey)
       || !skey[6])
     return GPG_ERR_BAD_MPI;
 
+  sk.E.model = MPI_EC_WEIERSTRASS;
   sk.E.p = skey[0];
   sk.E.a = skey[1];
   sk.E.b = skey[2];
@@ -778,6 +837,9 @@ ecc_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
       || !skey[6] )
     return GPG_ERR_BAD_MPI;
 
+  sk.E.model = ((flags & PUBKEY_FLAG_EDDSA)
+                ? MPI_EC_TWISTEDEDWARDS
+                : MPI_EC_WEIERSTRASS);
   sk.E.p = skey[0];
   sk.E.a = skey[1];
   sk.E.b = skey[2];
@@ -794,7 +856,10 @@ ecc_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
 
   resarr[0] = mpi_alloc (mpi_get_nlimbs (sk.E.p));
   resarr[1] = mpi_alloc (mpi_get_nlimbs (sk.E.p));
-  err = sign (data, &sk, resarr[0], resarr[1], flags, hashalgo);
+  if ((flags & PUBKEY_FLAG_EDDSA))
+    err = sign_eddsa (data, &sk, resarr[0], resarr[1], hashalgo);
+  else
+    err = sign_ecdsa (data, &sk, resarr[0], resarr[1], flags, hashalgo);
   if (err)
     {
       mpi_free (resarr[0]);
@@ -808,7 +873,8 @@ ecc_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
 
 static gcry_err_code_t
 ecc_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
-            int (*cmp)(void *, gcry_mpi_t), void *opaquev)
+            int (*cmp)(void *, gcry_mpi_t), void *opaquev,
+            int flags, int hashalgo)
 {
   gpg_err_code_t err;
   ECC_public_key pk;
@@ -821,6 +887,9 @@ ecc_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
       || !pkey[3] || !pkey[4] || !pkey[5] )
     return GPG_ERR_BAD_MPI;
 
+  pk.E.model = ((flags & PUBKEY_FLAG_EDDSA)
+                ? MPI_EC_TWISTEDEDWARDS
+                : MPI_EC_WEIERSTRASS);
   pk.E.p = pkey[0];
   pk.E.a = pkey[1];
   pk.E.b = pkey[2];
@@ -841,7 +910,11 @@ ecc_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
       return err;
     }
 
-  if (mpi_is_opaque (hash))
+  if ((flags & PUBKEY_FLAG_EDDSA))
+    {
+      err = verify_eddsa (hash, &pk, data[0], data[1], hashalgo);
+    }
+  else if (mpi_is_opaque (hash))
     {
       const void *abuf;
       unsigned int abits, qbits;
@@ -856,12 +929,12 @@ ecc_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
           if (abits > qbits)
             gcry_mpi_rshift (a, a, abits - qbits);
 
-          err = verify (a, &pk, data[0], data[1]);
+          err = verify_ecdsa (a, &pk, data[0], data[1]);
           gcry_mpi_release (a);
         }
     }
   else
-    err = verify (hash, &pk, data[0], data[1]);
+    err = verify_ecdsa (hash, &pk, data[0], data[1]);
 
   point_free (&pk.E.G);
   point_free (&pk.Q);
@@ -913,6 +986,7 @@ ecc_encrypt_raw (int algo, gcry_mpi_t *resarr, gcry_mpi_t k,
       || !pkey[0] || !pkey[1] || !pkey[2] || !pkey[3] || !pkey[4] || !pkey[5])
     return GPG_ERR_BAD_MPI;
 
+  pk.E.model = MPI_EC_WEIERSTRASS;
   pk.E.p = pkey[0];
   pk.E.a = pkey[1];
   pk.E.b = pkey[2];
@@ -933,7 +1007,7 @@ ecc_encrypt_raw (int algo, gcry_mpi_t *resarr, gcry_mpi_t k,
       return err;
     }
 
-  ctx = _gcry_mpi_ec_p_internal_new (pk.E.p, pk.E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (pk.E.model, pk.E.p, pk.E.a, pk.E.b);
 
   /* The following is false: assert( mpi_cmp_ui( R.x, 1 )==0 );, so */
   {
@@ -1021,7 +1095,7 @@ ecc_decrypt_raw (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
       return err;
     }
 
-
+  sk.E.model = MPI_EC_WEIERSTRASS;
   sk.E.p = skey[0];
   sk.E.a = skey[1];
   sk.E.b = skey[2];
@@ -1045,7 +1119,7 @@ ecc_decrypt_raw (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
     }
   sk.d = skey[6];
 
-  ctx = _gcry_mpi_ec_p_internal_new (sk.E.p, sk.E.a);
+  ctx = _gcry_mpi_ec_p_internal_new (sk.E.model, sk.E.p, sk.E.a, sk.E.b);
 
   /* R = dkG */
   point_init (&R);

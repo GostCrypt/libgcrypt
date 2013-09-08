@@ -722,7 +722,7 @@ secret (gcry_mpi_t output, gcry_mpi_t input, RSA_secret_key *skey )
       mpi_powm( m2, input, h, skey->q );
       /* h = u * ( m2 - m1 ) mod q */
       mpi_sub( h, m2, m1 );
-      if ( mpi_is_neg( h ) )
+      if ( mpi_has_sign ( h ) )
         mpi_add ( h, h, skey->q );
       mpi_mulm( h, skey->u, h, skey->q );
       /* m = m2 + h * p */
@@ -1020,8 +1020,8 @@ rsa_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey,
 
 static gcry_err_code_t
 rsa_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
-		  int (*cmp) (void *opaque, gcry_mpi_t tmp),
-		  void *opaquev)
+            int (*cmp) (void *opaque, gcry_mpi_t tmp), void *opaquev,
+            int flags, int hashalgo)
 {
   RSA_public_key pk;
   gcry_mpi_t result;
@@ -1030,6 +1030,8 @@ rsa_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
   (void)algo;
   (void)cmp;
   (void)opaquev;
+  (void)flags;
+  (void)hashalgo;
 
   if (mpi_is_opaque (hash))
     return GPG_ERR_INV_DATA;

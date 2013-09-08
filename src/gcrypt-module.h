@@ -52,14 +52,14 @@ typedef gcry_err_code_t (*gcry_cipher_setkey_t) (void *c,
 						 unsigned keylen);
 
 /* Type for the cipher_encrypt function.  */
-typedef void (*gcry_cipher_encrypt_t) (void *c,
-				       unsigned char *outbuf,
-				       const unsigned char *inbuf);
+typedef unsigned int (*gcry_cipher_encrypt_t) (void *c,
+					       unsigned char *outbuf,
+					       const unsigned char *inbuf);
 
 /* Type for the cipher_decrypt function.  */
-typedef void (*gcry_cipher_decrypt_t) (void *c,
-				       unsigned char *outbuf,
-				       const unsigned char *inbuf);
+typedef unsigned int (*gcry_cipher_decrypt_t) (void *c,
+					       unsigned char *outbuf,
+					       const unsigned char *inbuf);
 
 /* Type for the cipher_stencrypt function.  */
 typedef void (*gcry_cipher_stencrypt_t) (void *c,
@@ -137,7 +137,9 @@ typedef gcry_err_code_t (*gcry_pk_verify_t) (int algo,
 					     gcry_mpi_t *data,
 					     gcry_mpi_t *pkey,
 					     int (*cmp) (void *, gcry_mpi_t),
-					     void *opaquev);
+					     void *opaquev,
+                                             int flags,
+                                             int hashalgo);
 
 /* Type for the pk_get_nbits function.  */
 typedef unsigned (*gcry_pk_get_nbits_t) (int algo, gcry_mpi_t *pkey);

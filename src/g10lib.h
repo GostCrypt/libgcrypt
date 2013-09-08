@@ -67,6 +67,16 @@
 #endif
 
 
+/* I am not sure since when the unused attribute is really supported.
+   In any case it it only needed for gcc versions which print a
+   warning.  Thus let us require gcc >= 3.5.  */
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 5 )
+#define GCC_ATTR_UNUSED  __attribute__ ((unused))
+#else
+#define GCC_ATTR_UNUSED
+#endif
+
+
 /* Gettext macros.  */
 
 #define _(a)  _gcry_gettext(a)
@@ -235,7 +245,7 @@ int strcasecmp (const char *a, const char *b) _GCRY_GCC_ATTR_PURE;
 
 /* Stack burning.  */
 
-void _gcry_burn_stack (int bytes);
+void _gcry_burn_stack (unsigned int bytes);
 
 
 /* To avoid that a compiler optimizes certain memset calls away, these

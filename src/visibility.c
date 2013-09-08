@@ -293,6 +293,24 @@ gcry_mpi_swap (gcry_mpi_t a, gcry_mpi_t b)
 }
 
 int
+gcry_mpi_is_neg (gcry_mpi_t a)
+{
+  return _gcry_mpi_is_neg (a);
+}
+
+void
+gcry_mpi_neg (gcry_mpi_t w, gcry_mpi_t u)
+{
+  _gcry_mpi_neg (w, u);
+}
+
+void
+gcry_mpi_abs (gcry_mpi_t w)
+{
+  _gcry_mpi_abs (w);
+}
+
+int
 gcry_mpi_cmp (const gcry_mpi_t u, const gcry_mpi_t v)
 {
   return _gcry_mpi_cmp (u, v);
@@ -527,6 +545,13 @@ gcry_mpi_ec_mul (gcry_mpi_point_t w, gcry_mpi_t n, gcry_mpi_point_t u,
 {
   _gcry_mpi_ec_mul_point (w, n, u,
                           _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
+}
+
+int
+gcry_mpi_ec_curve_point (gcry_mpi_point_t point, gcry_ctx_t ctx)
+{
+  return _gcry_mpi_ec_curve_point
+    (point, _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC));
 }
 
 unsigned int

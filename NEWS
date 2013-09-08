@@ -12,7 +12,7 @@ Noteworthy changes in version 1.6.0 (unreleased)
 
  * Added support for the IDEA cipher algorithm.
 
- * Added support for the Salsa20 stream cipher.
+ * Added support for the Salsa20 and reduced Salsa20/12 stream ciphers.
 
  * Added a random number generator to directly use the system's RNG.
    Also added an interface to prefer the use of a specified RNG.
@@ -46,6 +46,9 @@ Noteworthy changes in version 1.6.0 (unreleased)
  GCRY_RNG_TYPE_STANDARD          NEW.
  GCRY_RNG_TYPE_FIPS              NEW.
  GCRY_RNG_TYPE_SYSTEM            NEW.
+ gcry_mpi_is_neg                 NEW.
+ gcry_mpi_neg                    NEW.
+ gcry_mpi_abs                    NEW.
  gcry_mpi_snatch                 NEW.
  gcry_mpi_point_t                NEW.
  gcry_mpi_point_new              NEW.
@@ -65,6 +68,7 @@ Noteworthy changes in version 1.6.0 (unreleased)
  gcry_mpi_ec_dup                 NEW.
  gcry_mpi_ec_add                 NEW.
  gcry_mpi_ec_mul                 NEW.
+ gcry_mpi_ec_curve_point         NEW.
  GCRYMPI_FLAG_IMMUTABLE          NEW.
  GCRYMPI_FLAG_CONST              NEW.
  GCRYMPI_CONST_ONE               NEW.
@@ -79,6 +83,7 @@ Noteworthy changes in version 1.6.0 (unreleased)
  GCRYCTL_DISABLE_PRIV_DROP       NEW.
  GCRY_CIPHER_SALSA20             NEW.
  gcry_sexp_nth_buffer            NEW.
+ GCRY_CIPHER_SALSA20R12          NEW.
 
 
 Noteworthy changes in version 1.5.0 (2011-06-29)

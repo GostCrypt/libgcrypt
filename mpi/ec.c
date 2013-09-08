@@ -328,6 +328,7 @@ ec_powm (gcry_mpi_t w, const gcry_mpi_t b, const gcry_mpi_t e,
          mpi_ec_t ctx)
 {
   mpi_powm (w, b, e, ctx->p);
+  _gcry_mpi_abs (w);
 }
 
 static void
@@ -385,14 +386,18 @@ ec_get_two_inv_p (mpi_ec_t ec)
    field GF(p).  P is the prime specifying this field, A is the first
    coefficient.  CTX is expected to be zeroized.  */
 static void
-ec_p_init (mpi_ec_t ctx, gcry_mpi_t p, gcry_mpi_t a)
+ec_p_init (mpi_ec_t ctx, enum gcry_mpi_ec_models model,
+           gcry_mpi_t p, gcry_mpi_t a, gcry_mpi_t b)
 {
   int i;
 
   /* Fixme: Do we want to check some constraints? e.g.  a < p  */
 
+  ctx->model = model;
   ctx->p = mpi_copy (p);
   ctx->a = mpi_copy (a);
+  if (b && model == MPI_EC_TWISTEDEDWARDS)
+    ctx->b = mpi_copy (b);
 
   ec_get_reset (ctx);
 
@@ -460,19 +465,51 @@ ec_deinit (void *opaque)
 
 /* This function returns a new context for elliptic curve based on the
    field GF(p).  P is the prime specifying this field, A is the first
-   coefficient.  This function is only used within Libgcrypt and not
+   coefficient, B is the second coefficient, and MODEL is the model
+   for the curve.  This function is only used within Libgcrypt and not
    part of the public API.
 
    This context needs to be released using _gcry_mpi_ec_free.  */
 mpi_ec_t
-_gcry_mpi_ec_p_internal_new (gcry_mpi_t p, gcry_mpi_t a)
+_gcry_mpi_ec_p_internal_new (enum gcry_mpi_ec_models model,
+                             gcry_mpi_t p, gcry_mpi_t a, gcry_mpi_t b)
 {
   mpi_ec_t ctx;
 
   ctx = gcry_xcalloc (1, sizeof *ctx);
-  ec_p_init (ctx, p, a);
+  ec_p_init (ctx, model, p, a, b);
 
   return ctx;
+}
+
+
+/* This is a variant of _gcry_mpi_ec_p_internal_new which returns an
+   public contect and does some error checking on the supplied
+   arguments.  On success the new context is stored at R_CTX and 0 is
+   returned; on error NULL is stored at R_CTX and an error code is
+   returned.
+
+   The context needs to be released using gcry_ctx_release.  */
+gpg_err_code_t
+_gcry_mpi_ec_p_new (gcry_ctx_t *r_ctx,
+                    enum gcry_mpi_ec_models model,
+                    gcry_mpi_t p, gcry_mpi_t a, gcry_mpi_t b)
+{
+  gcry_ctx_t ctx;
+  mpi_ec_t ec;
+
+  *r_ctx = NULL;
+  if (!p || !a || !mpi_cmp_ui (a, 0))
+    return GPG_ERR_EINVAL;
+
+  ctx = _gcry_ctx_alloc (CONTEXT_TYPE_EC, sizeof *ec, ec_deinit);
+  if (!ctx)
+    return gpg_err_code_from_syserror ();
+  ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
+  ec_p_init (ec, model, p, a, b);
+
+  *r_ctx = ctx;
+  return 0;
 }
 
 
@@ -486,32 +523,6 @@ _gcry_mpi_ec_free (mpi_ec_t ctx)
     }
 }
 
-
-/* This function returns a new context for elliptic curve operations
-   based on the field GF(p).  P is the prime specifying this field, A
-   is the first coefficient.  On success the new context is stored at
-   R_CTX and 0 is returned; on error NULL is stored at R_CTX and an
-   error code is returned.  The context needs to be released using
-   gcry_ctx_release.  This is an internal fucntions.  */
-gpg_err_code_t
-_gcry_mpi_ec_p_new (gcry_ctx_t *r_ctx, gcry_mpi_t p, gcry_mpi_t a)
-{
-  gcry_ctx_t ctx;
-  mpi_ec_t ec;
-
-  *r_ctx = NULL;
-  if (!p || !a || !mpi_cmp_ui (a, 0))
-    return GPG_ERR_EINVAL;
-
-  ctx = _gcry_ctx_alloc (CONTEXT_TYPE_EC, sizeof *ec, ec_deinit);
-  if (!ctx)
-    return gpg_err_code_from_syserror ();
-  ec = _gcry_ctx_get_pointer (ctx, CONTEXT_TYPE_EC);
-  ec_p_init (ec, p, a);
-
-  *r_ctx = ctx;
-  return 0;
-}
 
 gcry_mpi_t
 _gcry_mpi_ec_get_mpi (const char *name, gcry_ctx_t ctx, int copy)
@@ -684,9 +695,9 @@ _gcry_mpi_ec_get_affine (gcry_mpi_t x, gcry_mpi_t y, mpi_point_t point,
 
 
 
-/*  RESULT = 2 * POINT  */
-void
-_gcry_mpi_ec_dup_point (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
+/*  RESULT = 2 * POINT  (Weierstrass version). */
+static void
+dup_point_weierstrass (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
 {
 #define x3 (result->x)
 #define y3 (result->y)
@@ -767,12 +778,51 @@ _gcry_mpi_ec_dup_point (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
 }
 
 
+/*  RESULT = 2 * POINT  (Montgomery version). */
+static void
+dup_point_montgomery (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
+{
+  (void)result;
+  (void)point;
+  (void)ctx;
+  log_fatal ("%s: %s not yet supported\n",
+             "_gcry_mpi_ec_dup_point", "Montgomery");
+}
 
-/* RESULT = P1 + P2 */
+
+/*  RESULT = 2 * POINT  (Twisted Edwards version). */
+static void
+dup_point_twistededwards (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
+{
+  log_fatal ("%s: %s not yet supported\n",
+             "_gcry_mpi_ec_dup_point", "Twisted Edwards");
+}
+
+
+/*  RESULT = 2 * POINT  */
 void
-_gcry_mpi_ec_add_points (mpi_point_t result,
-                         mpi_point_t p1, mpi_point_t p2,
-                         mpi_ec_t ctx)
+_gcry_mpi_ec_dup_point (mpi_point_t result, mpi_point_t point, mpi_ec_t ctx)
+{
+  switch (ctx->model)
+    {
+    case MPI_EC_WEIERSTRASS:
+      dup_point_weierstrass (result, point, ctx);
+      break;
+    case MPI_EC_MONTGOMERY:
+      dup_point_montgomery (result, point, ctx);
+      break;
+    case MPI_EC_TWISTEDEDWARDS:
+      dup_point_twistededwards (result, point, ctx);
+      break;
+    }
+}
+
+
+/* RESULT = P1 + P2  (Weierstrass version).*/
+static void
+add_points_weierstrass (mpi_point_t result,
+                        mpi_point_t p1, mpi_point_t p2,
+                        mpi_ec_t ctx)
 {
 #define x1 (p1->x    )
 #define y1 (p1->y    )
@@ -910,6 +960,52 @@ _gcry_mpi_ec_add_points (mpi_point_t result,
 }
 
 
+/* RESULT = P1 + P2  (Montgomery version).*/
+static void
+add_points_montgomery (mpi_point_t result,
+                       mpi_point_t p1, mpi_point_t p2,
+                       mpi_ec_t ctx)
+{
+  (void)result;
+  (void)p1;
+  (void)p2;
+  (void)ctx;
+  log_fatal ("%s: %s not yet supported\n",
+             "_gcry_mpi_ec_add_points", "Montgomery");
+}
+
+
+/* RESULT = P1 + P2  (Twisted Edwards version).*/
+static void
+add_points_twistededwards (mpi_point_t result,
+                           mpi_point_t p1, mpi_point_t p2,
+                           mpi_ec_t ctx)
+{
+  log_fatal ("%s: %s not yet supported\n",
+             "_gcry_mpi_ec_add_points", "Twisted Edwards");
+}
+
+
+/* RESULT = P1 + P2 */
+void
+_gcry_mpi_ec_add_points (mpi_point_t result,
+                         mpi_point_t p1, mpi_point_t p2,
+                         mpi_ec_t ctx)
+{
+  switch (ctx->model)
+    {
+    case MPI_EC_WEIERSTRASS:
+      add_points_weierstrass (result, p1, p2, ctx);
+      break;
+    case MPI_EC_MONTGOMERY:
+      add_points_montgomery (result, p1, p2, ctx);
+      break;
+    case MPI_EC_TWISTEDEDWARDS:
+      add_points_twistededwards (result, p1, p2, ctx);
+      break;
+    }
+}
+
 
 /* Scalar point multiplication - the main function for ECC.  If takes
    an integer SCALAR and a POINT as well as the usual context CTX.
@@ -947,7 +1043,7 @@ _gcry_mpi_ec_mul_point (mpi_point_t result,
   k  = mpi_copy (scalar);
   yy = mpi_copy (point->y);
 
-  if ( mpi_is_neg (k) )
+  if ( mpi_has_sign (k) )
     {
       k->sign = 0;
       ec_invm (yy, yy, ctx);
@@ -1025,4 +1121,53 @@ _gcry_mpi_ec_mul_point (mpi_point_t result,
   mpi_free (h);
   mpi_free (k);
 #endif
+}
+
+
+/* Return true if POINT is on the curve described by CTX.  */
+int
+_gcry_mpi_ec_curve_point (gcry_mpi_point_t point, mpi_ec_t ctx)
+{
+  int res = 0;
+  gcry_mpi_t x, y, w;
+
+  x = mpi_new (0);
+  y = mpi_new (0);
+  w = mpi_new (0);
+
+  if (_gcry_mpi_ec_get_affine (x, y, point, ctx))
+    return 0;
+
+  switch (ctx->model)
+    {
+    case MPI_EC_WEIERSTRASS:
+      log_fatal ("%s: %s not yet supported\n",
+                 "_gcry_mpi_ec_curve_point", "Weierstrass");
+      break;
+    case MPI_EC_MONTGOMERY:
+      log_fatal ("%s: %s not yet supported\n",
+                 "_gcry_mpi_ec_curve_point", "Montgomery");
+      break;
+    case MPI_EC_TWISTEDEDWARDS:
+      {
+        /* a · x^2 + y^2 - 1 - b · x^2 · y^2 == 0 */
+        ec_powm (x, x, mpi_const (MPI_C_TWO), ctx);
+        ec_powm (y, y, mpi_const (MPI_C_TWO), ctx);
+        ec_mulm (w, ctx->a, x, ctx);
+        ec_addm (w, w, y, ctx);
+        ec_subm (w, w, mpi_const (MPI_C_ONE), ctx);
+        ec_mulm (x, x, y, ctx);
+        ec_mulm (x, x, ctx->b, ctx);
+        ec_subm (w, w, x, ctx);
+        if (!mpi_cmp_ui (w, 0))
+          res = 1;
+      }
+      break;
+    }
+
+  gcry_mpi_release (w);
+  gcry_mpi_release (x);
+  gcry_mpi_release (y);
+
+  return res;
 }

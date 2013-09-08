@@ -53,6 +53,7 @@ _gcry_ecc_curve_copy (elliptic_curve_t E)
 {
   elliptic_curve_t R;
 
+  R.model = E.model;
   R.p = mpi_copy (E.p);
   R.a = mpi_copy (E.a);
   R.b = mpi_copy (E.b);
@@ -62,6 +63,25 @@ _gcry_ecc_curve_copy (elliptic_curve_t E)
 
   return R;
 }
+
+
+/*
+ * Return a description of the curve model.
+ */
+const char *
+_gcry_ecc_model2str (enum gcry_mpi_ec_models model)
+{
+  const char *str = "?";
+  switch (model)
+    {
+    case MPI_EC_WEIERSTRASS:    str = "Weierstrass"; break;
+    case MPI_EC_MONTGOMERY:     str = "Montgomery";  break;
+    case MPI_EC_TWISTEDEDWARDS: str = "Twisted Edwards"; break;
+    }
+  return str;
+}
+
+
 
 
 gcry_mpi_t

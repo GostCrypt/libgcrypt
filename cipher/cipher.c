@@ -107,6 +107,8 @@ static struct cipher_table_entry
 #if USE_SALSA20
     { &_gcry_cipher_spec_salsa20,
       &_gcry_cipher_extraspec_salsa20,    GCRY_CIPHER_SALSA20 },
+    { &_gcry_cipher_spec_salsa20r12,
+      &_gcry_cipher_extraspec_salsa20,    GCRY_CIPHER_SALSA20R12 },
 #endif
 #if USE_GOST28147
     { &_gcry_cipher_spec_gost28147,
@@ -154,7 +156,7 @@ dummy_setkey (void *c, const unsigned char *key, unsigned int keylen)
   return GPG_ERR_NO_ERROR;
 }
 
-static void
+static unsigned int
 dummy_encrypt_block (void *c,
 		     unsigned char *outbuf, const unsigned char *inbuf)
 {
@@ -162,9 +164,10 @@ dummy_encrypt_block (void *c,
   (void)outbuf;
   (void)inbuf;
   BUG();
+  return 0;
 }
 
-static void
+static unsigned int
 dummy_decrypt_block (void *c,
 		     unsigned char *outbuf, const unsigned char *inbuf)
 {
@@ -172,6 +175,7 @@ dummy_decrypt_block (void *c,
   (void)outbuf;
   (void)inbuf;
   BUG();
+  return 0;
 }
 
 static void
@@ -907,6 +911,7 @@ do_ecb_encrypt (gcry_cipher_hd_t c,
 {
   unsigned int blocksize = c->cipher->blocksize;
   unsigned int n, nblocks;
+  unsigned int burn, nburn;
 
   if (outbuflen < inbuflen)
     return GPG_ERR_BUFFER_TOO_SHORT;
@@ -914,13 +919,19 @@ do_ecb_encrypt (gcry_cipher_hd_t c,
     return GPG_ERR_INV_LENGTH;
 
   nblocks = inbuflen / c->cipher->blocksize;
+  burn = 0;
 
   for (n=0; n < nblocks; n++ )
     {
-      c->cipher->encrypt (&c->context.c, outbuf, (byte*)/*arggg*/inbuf);
+      nburn = c->cipher->encrypt (&c->context.c, outbuf, (byte*)/*arggg*/inbuf);
+      burn = nburn > burn ? nburn : burn;
       inbuf  += blocksize;
       outbuf += blocksize;
     }
+
+  if (burn > 0)
+    _gcry_burn_stack (burn + 4 * sizeof(void *));
+
   return 0;
 }
 
@@ -931,19 +942,26 @@ do_ecb_decrypt (gcry_cipher_hd_t c,
 {
   unsigned int blocksize = c->cipher->blocksize;
   unsigned int n, nblocks;
+  unsigned int burn, nburn;
 
   if (outbuflen < inbuflen)
     return GPG_ERR_BUFFER_TOO_SHORT;
   if ((inbuflen % blocksize))
     return GPG_ERR_INV_LENGTH;
+
   nblocks = inbuflen / c->cipher->blocksize;
+  burn = 0;
 
   for (n=0; n < nblocks; n++ )
     {
-      c->cipher->decrypt (&c->context.c, outbuf, (byte*)/*arggg*/inbuf );
+      nburn = c->cipher->decrypt (&c->context.c, outbuf, (byte*)/*arggg*/inbuf);
+      burn = nburn > burn ? nburn : burn;
       inbuf  += blocksize;
       outbuf += blocksize;
     }
+
+  if (burn > 0)
+    _gcry_burn_stack (burn + 4 * sizeof(void *));
 
   return 0;
 }
