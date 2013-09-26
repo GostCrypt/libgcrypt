@@ -9181,6 +9181,11 @@ static void
 do_check_one_pubkey (int n, gcry_sexp_t skey, gcry_sexp_t pkey,
 		     const unsigned char *grip, int algo, int flags)
 {
+ gcry_error_t rc;
+
+ rc = gcry_pk_testkey (skey);
+ if (rc)
+	fail ("gcry_pk_testkey failed: %s\n", gpg_strerror (rc));
  if (flags & FLAG_SIGN)
    {
      if (algo == GCRY_PK_ECDSA)
