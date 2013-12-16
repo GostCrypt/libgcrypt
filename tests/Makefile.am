@@ -33,8 +33,8 @@ tests_sh_last = hashtest-256g
 TESTS = $(tests_bin) $(tests_sh) $(tests_bin_last) $(tests_sh_last)
 
 # Force sequential run of some tests.
-bench-slope.log:    benchmark.log
-hashtest-256g.log:  bench-slope.log
+bench-slope.trs:    benchmark.trs
+hashtest-256g.trs:  bench-slope.trs
 
 
 TESTS_ENVIRONMENT = GCRYPT_IN_REGRESSION_TEST=1
