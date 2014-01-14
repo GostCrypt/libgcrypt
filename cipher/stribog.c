@@ -1080,70 +1080,70 @@ static const u64 stribog_table[8][256] =
     U64_C(0x72d14d3493b2e388), U64_C(0xd6a30f258c153427) },
 };
 
-static const u64 C16[13][16] =
+static const u64 C16[12][8] =
 {
-  { U64_C(0xdd806559f2a64507), U64_C(0x05767436cc744d23),
-    U64_C(0xa2422a08a460d315), U64_C(0x4b7ce09192676901),
-    U64_C(0x714eb88d7585c4fc), U64_C(0x2f6a76432e45d016),
-    U64_C(0xebcb2f81c0657c1f), U64_C(0xb1085bda1ecadae9) },
-  { U64_C(0xe679047021b19bb7), U64_C(0x55dda21bd7cbcd56),
-    U64_C(0x5cb561c2db0aa7ca), U64_C(0x9ab5176b12d69958),
-    U64_C(0x61d55e0f16b50131), U64_C(0xf3feea720a232b98),
-    U64_C(0x4fe39d460f70b5d7), U64_C(0x6fa3b58aa99d2f1a) },
-  { U64_C(0x991e96f50aba0ab2), U64_C(0xc2b6f443867adb31),
-    U64_C(0xc1c93a376062db09), U64_C(0xd3e20fe490359eb1),
-    U64_C(0xf2ea7514b1297b7b), U64_C(0x06f15e5f529c1f8b),
-    U64_C(0x0a39fc286a3d8435), U64_C(0xf574dcac2bce2fc7) },
-  { U64_C(0x220cbebc84e3d12e), U64_C(0x3453eaa193e837f1),
-    U64_C(0xd8b71333935203be), U64_C(0xa9d72c82ed03d675),
-    U64_C(0x9d721cad685e353f), U64_C(0x488e857e335c3c7d),
-    U64_C(0xf948e1a05d71e4dd), U64_C(0xef1fdfb3e81566d2) },
-  { U64_C(0x601758fd7c6cfe57), U64_C(0x7a56a27ea9ea63f5),
-    U64_C(0xdfff00b723271a16), U64_C(0xbfcd1747253af5a3),
-    U64_C(0x359e35d7800fffbd), U64_C(0x7f151c1f1686104a),
-    U64_C(0x9a3f410c6ca92363), U64_C(0x4bea6bacad474799) },
-  { U64_C(0xfa68407a46647d6e), U64_C(0xbf71c57236904f35),
-    U64_C(0x0af21f66c2bec6b6), U64_C(0xcffaa6b71c9ab7b4),
-    U64_C(0x187f9ab49af08ec6), U64_C(0x2d66c4f95142a46c),
-    U64_C(0x6fa4c33b7a3039c0), U64_C(0xae4faeae1d3ad3d9) },
-  { U64_C(0x8886564d3a14d493), U64_C(0x3517454ca23c4af3),
-    U64_C(0x06476983284a0504), U64_C(0x0992abc52d822c37),
-    U64_C(0xd3473e33197a93c9), U64_C(0x399ec6c7e6bf87c9),
-    U64_C(0x51ac86febf240954), U64_C(0xf4c70e16eeaac5ec) },
-  { U64_C(0xa47f0dd4bf02e71e), U64_C(0x36acc2355951a8d9),
-    U64_C(0x69d18d2bd1a5c42f), U64_C(0xf4892bcb929b0690),
-    U64_C(0x89b4443b4ddbc49a), U64_C(0x4eb7f8719c36de1e),
-    U64_C(0x03e7aa020c6e4141), U64_C(0x9b1f5b424d93c9a7) },
-  { U64_C(0x7261445183235adb), U64_C(0x0e38dc92cb1f2a60),
-    U64_C(0x7b2b8a9aa6079c54), U64_C(0x800a440bdbb2ceb1),
-    U64_C(0x3cd955b7e00d0984), U64_C(0x3a7d3a1b25894224),
-    U64_C(0x944c9ad8ec165fde), U64_C(0x378f5a541631229b) },
-  { U64_C(0x74b4c7fb98459ced), U64_C(0x3698fad1153bb6c3),
-    U64_C(0x7a1e6c303b7652f4), U64_C(0x9fe76702af69334b),
-    U64_C(0x1fffe18a1b336103), U64_C(0x8941e71cff8a78db),
-    U64_C(0x382ae548b2e4f3f3), U64_C(0xabbedea680056f52) },
-  { U64_C(0x6bcaa4cd81f32d1b), U64_C(0xdea2594ac06fd85d),
-    U64_C(0xefbacd1d7d476e98), U64_C(0x8a1d71efea48b9ca),
-    U64_C(0x2001802114846679), U64_C(0xd8fa6bbbebab0761),
-    U64_C(0x3002c6cd635afe94), U64_C(0x7bcd9ed0efc889fb) },
-  { U64_C(0x48bc924af11bd720), U64_C(0xfaf417d5d9b21b99),
-    U64_C(0xe71da4aa88e12852), U64_C(0x5d80ef9d1891cc86),
-    U64_C(0xf82012d430219f9b), U64_C(0xcda43c32bcdf1d77),
-    U64_C(0xd21380b00449b17a), U64_C(0x378ee767f11631ba) },
+  { U64_C(0xb1085bda1ecadae9), U64_C(0xebcb2f81c0657c1f),
+    U64_C(0x2f6a76432e45d016), U64_C(0x714eb88d7585c4fc),
+    U64_C(0x4b7ce09192676901), U64_C(0xa2422a08a460d315),
+    U64_C(0x05767436cc744d23), U64_C(0xdd806559f2a64507) },
+  { U64_C(0x6fa3b58aa99d2f1a), U64_C(0x4fe39d460f70b5d7),
+    U64_C(0xf3feea720a232b98), U64_C(0x61d55e0f16b50131),
+    U64_C(0x9ab5176b12d69958), U64_C(0x5cb561c2db0aa7ca),
+    U64_C(0x55dda21bd7cbcd56), U64_C(0xe679047021b19bb7) },
+  { U64_C(0xf574dcac2bce2fc7), U64_C(0x0a39fc286a3d8435),
+    U64_C(0x06f15e5f529c1f8b), U64_C(0xf2ea7514b1297b7b),
+    U64_C(0xd3e20fe490359eb1), U64_C(0xc1c93a376062db09),
+    U64_C(0xc2b6f443867adb31), U64_C(0x991e96f50aba0ab2) },
+  { U64_C(0xef1fdfb3e81566d2), U64_C(0xf948e1a05d71e4dd),
+    U64_C(0x488e857e335c3c7d), U64_C(0x9d721cad685e353f),
+    U64_C(0xa9d72c82ed03d675), U64_C(0xd8b71333935203be),
+    U64_C(0x3453eaa193e837f1), U64_C(0x220cbebc84e3d12e) },
+  { U64_C(0x4bea6bacad474799), U64_C(0x9a3f410c6ca92363),
+    U64_C(0x7f151c1f1686104a), U64_C(0x359e35d7800fffbd),
+    U64_C(0xbfcd1747253af5a3), U64_C(0xdfff00b723271a16),
+    U64_C(0x7a56a27ea9ea63f5), U64_C(0x601758fd7c6cfe57) },
+  { U64_C(0xae4faeae1d3ad3d9), U64_C(0x6fa4c33b7a3039c0),
+    U64_C(0x2d66c4f95142a46c), U64_C(0x187f9ab49af08ec6),
+    U64_C(0xcffaa6b71c9ab7b4), U64_C(0x0af21f66c2bec6b6),
+    U64_C(0xbf71c57236904f35), U64_C(0xfa68407a46647d6e) },
+  { U64_C(0xf4c70e16eeaac5ec), U64_C(0x51ac86febf240954),
+    U64_C(0x399ec6c7e6bf87c9), U64_C(0xd3473e33197a93c9),
+    U64_C(0x0992abc52d822c37), U64_C(0x06476983284a0504),
+    U64_C(0x3517454ca23c4af3), U64_C(0x8886564d3a14d493) },
+  { U64_C(0x9b1f5b424d93c9a7), U64_C(0x03e7aa020c6e4141),
+    U64_C(0x4eb7f8719c36de1e), U64_C(0x89b4443b4ddbc49a),
+    U64_C(0xf4892bcb929b0690), U64_C(0x69d18d2bd1a5c42f),
+    U64_C(0x36acc2355951a8d9), U64_C(0xa47f0dd4bf02e71e) },
+  { U64_C(0x378f5a541631229b), U64_C(0x944c9ad8ec165fde),
+    U64_C(0x3a7d3a1b25894224), U64_C(0x3cd955b7e00d0984),
+    U64_C(0x800a440bdbb2ceb1), U64_C(0x7b2b8a9aa6079c54),
+    U64_C(0x0e38dc92cb1f2a60), U64_C(0x7261445183235adb) },
+  { U64_C(0xabbedea680056f52), U64_C(0x382ae548b2e4f3f3),
+    U64_C(0x8941e71cff8a78db), U64_C(0x1fffe18a1b336103),
+    U64_C(0x9fe76702af69334b), U64_C(0x7a1e6c303b7652f4),
+    U64_C(0x3698fad1153bb6c3), U64_C(0x74b4c7fb98459ced) },
+  { U64_C(0x7bcd9ed0efc889fb), U64_C(0x3002c6cd635afe94),
+    U64_C(0xd8fa6bbbebab0761), U64_C(0x2001802114846679),
+    U64_C(0x8a1d71efea48b9ca), U64_C(0xefbacd1d7d476e98),
+    U64_C(0xdea2594ac06fd85d), U64_C(0x6bcaa4cd81f32d1b) },
+  { U64_C(0x378ee767f11631ba), U64_C(0xd21380b00449b17a),
+    U64_C(0xcda43c32bcdf1d77), U64_C(0xf82012d430219f9b),
+    U64_C(0x5d80ef9d1891cc86), U64_C(0xe71da4aa88e12852),
+    U64_C(0xfaf417d5d9b21b99), U64_C(0x48bc924af11bd720) },
 };
 
 
 #define strido(out, temp, i) do { \
 	u64 t; \
-	t  = stribog_table[0][(temp[0] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[1][(temp[1] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[2][(temp[2] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[3][(temp[3] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[4][(temp[4] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[5][(temp[5] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[6][(temp[6] >> (i * 8)) & 0xff]; \
-	t ^= stribog_table[7][(temp[7] >> (i * 8)) & 0xff]; \
-	out[i] = t; } while(0)
+	t  = stribog_table[0][(temp[7] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[1][(temp[6] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[2][(temp[5] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[3][(temp[4] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[4][(temp[3] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[5][(temp[2] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[6][(temp[1] >> (i * 8)) & 0xff]; \
+	t ^= stribog_table[7][(temp[0] >> (i * 8)) & 0xff]; \
+	out[7-i] = t; } while(0)
 
 static void LPSX (u64 *out, const u64 *a, const u64 *b)
 {
@@ -1227,14 +1227,14 @@ transform_bits (STRIBOG_CONTEXT *hd, const unsigned char *data, unsigned count)
   int i;
 
   for (i = 0; i < 8; i++)
-    M[i] = buf_get_le64(data + i * 8);
+    M[7-i] = buf_get_le64(data + i * 8);
 
   g (hd->h, M, hd->N);
-  l = hd->N[0];
-  hd->N[0] += count;
-  if (hd->N[0] < l)
+  l = hd->N[7];
+  hd->N[7] += count;
+  if (hd->N[7] < l)
     { /* overflow */
-      for (i = 1; i < 8; i++)
+      for (i = 6; i >= 0; i++)
         {
           hd->N[i]++;
           if (hd->N[i] != 0)
@@ -1242,22 +1242,12 @@ transform_bits (STRIBOG_CONTEXT *hd, const unsigned char *data, unsigned count)
         }
     }
 
-  hd->Sigma[0] += M[0];
-  for (i = 1; i < 8; i++)
-    if (hd->Sigma[i-1] < M[i-1])
-      hd->Sigma[i] += M[i] + 1;
+  hd->Sigma[7] += M[7];
+  for (i = 7; i >= 1; i--)
+    if (hd->Sigma[i] < M[i])
+      hd->Sigma[i-1] += M[i-1] + 1;
     else
-      hd->Sigma[i] += M[i];
-}
-
-static unsigned int
-transform_blk (void *context, const unsigned char *inbuf_arg)
-{
-  STRIBOG_CONTEXT *hd = context;
-
-  transform_bits (hd, inbuf_arg, 64 * 8);
-
-  return /* burn_stack */ 768;
+      hd->Sigma[i-1] += M[i-1];
 }
 
 static unsigned int
@@ -1267,7 +1257,8 @@ transform ( void *c, const unsigned char *data, size_t nblks )
 
   do
     {
-      burn = transform_blk (c, data);
+      transform_bits (c, data, 64 * 8);
+      burn = /* burn_stack */ 768;
       data += 64;
     }
   while (--nblks);
@@ -1300,32 +1291,24 @@ stribog_final (void *context)
   g (hd->h, hd->Sigma, Z);
 
   for (i = 0; i < 8; i++)
-    hd->h[i] = le_bswap64(hd->h[i]);
+    hd->h[i] = be_bswap64(hd->h[i]);
 
   _gcry_burn_stack (768);
 }
 
 static byte *
-stribog_read_512 (void *context)
+stribog_read (void *context)
 {
   STRIBOG_CONTEXT *hd = context;
 
   return hd->result;
 }
 
-static byte *
-stribog_read_256 (void *context)
-{
-  STRIBOG_CONTEXT *hd = context;
-
-  return hd->result + 32;
-}
-
 gcry_md_spec_t _gcry_digest_spec_stribog_256 =
   {
     GCRY_MD_STRIBOG256, {0, 0},
     "STRIBOG256", NULL, 0, NULL, 32,
-    stribog_init_256, _gcry_md_block_write, stribog_final, stribog_read_256,
+    stribog_init_256, _gcry_md_block_write, stribog_final, stribog_read,
     sizeof (STRIBOG_CONTEXT)
   };
 
@@ -1333,6 +1316,6 @@ gcry_md_spec_t _gcry_digest_spec_stribog_512 =
   {
     GCRY_MD_STRIBOG512, {0, 0},
     "STRIBOG512", NULL, 0, NULL, 64,
-    stribog_init_512, _gcry_md_block_write, stribog_final, stribog_read_512,
+    stribog_init_512, _gcry_md_block_write, stribog_final, stribog_read,
     sizeof (STRIBOG_CONTEXT)
   };
