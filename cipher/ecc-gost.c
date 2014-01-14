@@ -32,6 +32,49 @@
 #include "ecc-common.h"
 #include "pubkey-internal.h"
 
+static gpg_err_code_t
+_gcry_gost_normalize_hash (gcry_mpi_t input,
+                           gcry_mpi_t *out,
+                           unsigned int qbits)
+{
+  gpg_err_code_t rc = 0;
+  byte*abuf;
+  unsigned int abytes;
+  gcry_mpi_t hash;
+  unsigned int qbytes = (qbits + 7)/8;
+  byte arr[qbytes];
+  int i, j;
+
+  if (mpi_is_opaque (input))
+    {
+      abuf = mpi_get_opaque (input, &abytes);
+      abytes = (abytes + 7)/8;
+    }
+  else
+    {
+      size_t temp;
+      rc = _gcry_mpi_aprint (GCRYMPI_FMT_USG, &abuf, &temp, input);
+      abytes = temp;
+    }
+
+  if (abytes != qbytes)
+    {
+      memset(arr+abytes, 0, qbytes - abytes);
+    }
+
+  for (i = 0, j = abytes-1; i < abytes; i++, j--)
+    arr[j] = abuf[i];
+
+  rc = _gcry_mpi_scan (&hash, GCRYMPI_FMT_USG, arr, qbytes, NULL);
+
+  *out = hash;
+
+  if (!mpi_is_opaque (input))
+    xfree (abuf);
+
+  return rc;
+}
+
 
 /* Compute an GOST R 34.10-01/-12 signature.
  * Return the signature struct (r,s) from the message hash.  The caller
@@ -45,8 +88,7 @@ _gcry_ecc_gost_sign (gcry_mpi_t input, ECC_secret_key *skey,
   gcry_mpi_t k, dr, sum, ke, x, e;
   mpi_point_struct I;
   gcry_mpi_t hash;
-  const void *abuf;
-  unsigned int abits, qbits;
+  unsigned int qbits;
   mpi_ec_t ctx;
 
   if (DBG_CIPHER)
@@ -55,18 +97,9 @@ _gcry_ecc_gost_sign (gcry_mpi_t input, ECC_secret_key *skey,
   qbits = mpi_get_nbits (skey->E.n);
 
   /* Convert the INPUT into an MPI if needed.  */
-  if (mpi_is_opaque (input))
-    {
-      abuf = mpi_get_opaque (input, &abits);
-      rc = _gcry_mpi_scan (&hash, GCRYMPI_FMT_USG, abuf, (abits+7)/8, NULL);
-      if (rc)
-        return rc;
-      if (abits > qbits)
-        mpi_rshift (hash, hash, abits - qbits);
-    }
-  else
-    hash = input;
-
+  rc = _gcry_gost_normalize_hash (input, &hash, qbits);
+  if (rc)
+    return rc;
 
   k = NULL;
   dr = mpi_alloc (0);
@@ -79,7 +112,7 @@ _gcry_ecc_gost_sign (gcry_mpi_t input, ECC_secret_key *skey,
   ctx = _gcry_mpi_ec_p_internal_new (skey->E.model, skey->E.dialect, 0,
                                      skey->E.p, skey->E.a, skey->E.b);
 
-  mpi_mod (e, input, skey->E.n); /* e = hash mod n */
+  mpi_mod (e, hash, skey->E.n); /* e = hash mod n */
 
   if (!mpi_cmp_ui (e, 0))
     mpi_set_ui (e, 1);
@@ -142,7 +175,7 @@ _gcry_ecc_gost_verify (gcry_mpi_t input, ECC_public_key *pkey,
                        gcry_mpi_t r, gcry_mpi_t s)
 {
   gpg_err_code_t err = 0;
-  gcry_mpi_t e, x, z1, z2, v, rv, zero;
+  gcry_mpi_t hash, e, x, z1, z2, v, rv, zero;
   mpi_point_struct Q, Q1, Q2;
   mpi_ec_t ctx;
 
@@ -166,7 +199,12 @@ _gcry_ecc_gost_verify (gcry_mpi_t input, ECC_public_key *pkey,
   ctx = _gcry_mpi_ec_p_internal_new (pkey->E.model, pkey->E.dialect, 0,
                                      pkey->E.p, pkey->E.a, pkey->E.b);
 
-  mpi_mod (e, input, pkey->E.n); /* e = hash mod n */
+  /* Convert the INPUT into an MPI if needed.  */
+  err = _gcry_gost_normalize_hash (input, &hash, mpi_get_nbits (pkey->E.n));
+  if (err)
+    return err;
+
+  mpi_mod (e, hash, pkey->E.n); /* e = hash mod n */
   if (!mpi_cmp_ui (e, 0))
     mpi_set_ui (e, 1);
   mpi_invm (v, e, pkey->E.n); /* v = e^(-1) (mod n) */
@@ -229,5 +267,9 @@ _gcry_ecc_gost_verify (gcry_mpi_t input, ECC_public_key *pkey,
   mpi_free (z1);
   mpi_free (x);
   mpi_free (e);
+
+  if (hash != input)
+    mpi_free (hash);
+
   return err;
 }
