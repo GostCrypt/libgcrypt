@@ -97,6 +97,7 @@ _gcry_pk_util_parse_flaglist (gcry_sexp_t list,
             {
               encoding = PUBKEY_ENC_RAW;
               flags |= PUBKEY_FLAG_GOST;
+              flags |= PUBKEY_FLAG_RAW_FLAG; /* Implicitly given.  */
             }
           else if (!igninvflag)
             rc = GPG_ERR_INV_FLAG;
