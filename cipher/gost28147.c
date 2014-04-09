@@ -35,6 +35,7 @@
 #include "types.h"
 #include "g10lib.h"
 #include "cipher.h"
+#include "mac-internal.h"
 #include "bufhelp.h"
 
 #include "gost.h"
@@ -230,4 +231,164 @@ gcry_cipher_spec_t _gcry_cipher_spec_gost28147 =
     gost_encrypt_block,
     gost_decrypt_block,
     NULL, NULL, NULL, gost_set_extra_info,
+  };
+
+static gcry_err_code_t
+gost_imit_open (gcry_mac_hd_t h)
+{
+  (void) h;
+  memset(&h->u.imit, 0, sizeof(h->u.imit));
+  return 0;
+}
+
+static void
+gost_imit_close (gcry_mac_hd_t h)
+{
+  (void) h;
+}
+
+static gcry_err_code_t
+gost_imit_setkey (gcry_mac_hd_t h, const unsigned char *key, size_t keylen)
+{
+  h->u.imit.ctx.sbox = sbox_CryptoPro_A;
+  return gost_setkey (&h->u.imit.ctx, key, keylen);
+}
+
+
+static gcry_err_code_t
+gost_imit_reset (gcry_mac_hd_t h)
+{
+  h->u.imit.n1 = h->u.imit.n2 = 0;
+  h->u.imit.unused = 0;
+  return 0;
+}
+
+static int
+gost_imit_block(gcry_mac_hd_t h, u32 n1, u32 n2)
+{
+  GOST28147_context *ctx = &h->u.imit.ctx;
+  n1 ^= h->u.imit.n1;
+  n2 ^= h->u.imit.n2;
+
+  n2 ^= gost_val (ctx, n1, 0); n1 ^= gost_val (ctx, n2, 1);
+  n2 ^= gost_val (ctx, n1, 2); n1 ^= gost_val (ctx, n2, 3);
+  n2 ^= gost_val (ctx, n1, 4); n1 ^= gost_val (ctx, n2, 5);
+  n2 ^= gost_val (ctx, n1, 6); n1 ^= gost_val (ctx, n2, 7);
+
+  n2 ^= gost_val (ctx, n1, 0); n1 ^= gost_val (ctx, n2, 1);
+  n2 ^= gost_val (ctx, n1, 2); n1 ^= gost_val (ctx, n2, 3);
+  n2 ^= gost_val (ctx, n1, 4); n1 ^= gost_val (ctx, n2, 5);
+  n2 ^= gost_val (ctx, n1, 6); n1 ^= gost_val (ctx, n2, 7);
+
+  h->u.imit.n1 = n1;
+  h->u.imit.n2 = n2;
+
+  return /* burn_stack */ 4*sizeof(void*) /* func call */ +
+                          3*sizeof(void*) /* stack */ +
+                          4*sizeof(void*) /* gost_val call */;
+}
+
+static gcry_err_code_t
+gost_imit_write (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  const int blocksize = 8;
+  unsigned int burn = 0;
+  if (!buflen || !buf)
+    return GPG_ERR_NO_ERROR;
+
+  if (h->u.imit.unused)
+    {
+      for (; buflen && h->u.imit.unused < blocksize; buflen --)
+        h->u.imit.lastiv[h->u.imit.unused++] = *buf++;
+
+      if (h->u.imit.unused < blocksize)
+        return GPG_ERR_NO_ERROR;
+
+      burn = gost_imit_block (h,
+          buf_get_le32 (h->u.imit.lastiv+0),
+          buf_get_le32 (h->u.imit.lastiv+4));
+
+      h->u.imit.unused = 0;
+    }
+
+  while (buflen >= blocksize)
+    {
+      burn = gost_imit_block (h,
+            buf_get_le32 (buf+0), buf_get_le32 (buf+4));
+      buf += blocksize;
+      buflen -= blocksize;
+    }
+
+  for (; buflen; buflen--)
+    h->u.imit.lastiv[h->u.imit.unused++] = *buf++;
+
+  return GPG_ERR_NO_ERROR;
+}
+
+
+static gcry_err_code_t
+gost_imit_read (gcry_mac_hd_t h, unsigned char *outbuf, size_t * outlen)
+{
+  unsigned int dlen = 8;
+  char digest[8];
+
+  buf_put_le32 (digest+0, h->u.imit.n1);
+  buf_put_le32 (digest+4, h->u.imit.n2);
+
+  if (*outlen <= dlen)
+    buf_cpy (outbuf, digest, *outlen);
+  else
+    {
+      buf_cpy (outbuf, digest, dlen);
+      *outlen = dlen;
+    }
+  return 0;
+}
+
+
+static gcry_err_code_t
+gost_imit_verify (gcry_mac_hd_t h, const unsigned char *buf, size_t buflen)
+{
+  char tbuf[8];
+
+  buf_put_le32 (tbuf+0, h->u.imit.n1);
+  buf_put_le32 (tbuf+4, h->u.imit.n2);
+
+  return buf_eq_const(tbuf, buf, buflen) ?
+             GPG_ERR_NO_ERROR : GPG_ERR_CHECKSUM;
+}
+
+
+static unsigned int
+gost_imit_get_maclen (int algo)
+{
+  (void) algo;
+  return 4; /* or 8 */
+}
+
+
+static unsigned int
+gost_imit_get_keylen (int algo)
+{
+  (void) algo;
+  return 256 / 8;
+}
+
+static gcry_mac_spec_ops_t gost_imit_ops = {
+  gost_imit_open,
+  gost_imit_close,
+  gost_imit_setkey,
+  NULL,
+  gost_imit_reset,
+  gost_imit_write,
+  gost_imit_read,
+  gost_imit_verify,
+  gost_imit_get_maclen,
+  gost_imit_get_keylen,
+};
+
+gcry_mac_spec_t _gcry_mac_type_spec_gost28147_imit =
+  {
+    GCRY_MAC_GOST28147_IMIT, {0, 0}, "GOST28147_IMIT",
+    &gost_imit_ops
   };

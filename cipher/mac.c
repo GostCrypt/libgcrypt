@@ -113,6 +113,9 @@ static gcry_mac_spec_t *mac_list[] = {
   &_gcry_mac_type_spec_cmac_gost28147,
 #endif
   &_gcry_mac_type_spec_poly1305mac,
+#if USE_GOST28147
+  &_gcry_mac_type_spec_gost28147_imit,
+#endif
   NULL,
 };
 
