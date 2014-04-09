@@ -95,6 +95,7 @@ typedef struct gcry_mac_spec
   const gcry_mac_spec_ops_t *ops;
 } gcry_mac_spec_t;
 
+#include "gost.h"
 
 /* The handle structure.  */
 struct gcry_mac_handle
@@ -120,6 +121,13 @@ struct gcry_mac_handle
     struct {
       struct poly1305mac_context_s *ctx;
     } poly1305mac;
+    struct {
+      GOST28147_context ctx;
+      u32 n1, n2;
+      unsigned int unused;
+      unsigned int count;
+      unsigned char lastiv[8]; /* IMIT blocksize */
+    } imit;
   } u;
 };
 
@@ -218,6 +226,9 @@ extern gcry_mac_spec_t _gcry_mac_type_spec_cmac_idea;
 #endif
 #if USE_GOST28147
 extern gcry_mac_spec_t _gcry_mac_type_spec_cmac_gost28147;
+#endif
+#if USE_GOST28147
+extern gcry_mac_spec_t _gcry_mac_type_spec_gost28147_imit;
 #endif
 
 /*
