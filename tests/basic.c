@@ -9815,6 +9815,46 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey)
         /* */    "000102030405060708090A0B0C0D0E0F#))",
         0
       },
+      { 256,
+        "(data (flags gost)\n"
+        " (hash gostr3411_94\n"
+        /* */   "#00112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0,
+        "(data (flags gost)\n"
+        " (hash gostr3411_94\n"
+        /* */   "#80112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0
+      },
+      { 256,
+        "(data (flags gost)\n"
+        " (hash stribog256\n"
+        /* */   "#00112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0,
+        "(data (flags gost)\n"
+        " (hash stribog256\n"
+        /* */   "#80112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0
+      },
+      { 512,
+        "(data (flags gost)\n"
+        " (hash stribog512\n"
+        /* */   "#00112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F"
+        /* */    "000102030405060708090A0B0C0D0E0F"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0,
+        "(data (flags gost)\n"
+        " (hash stribog512\n"
+        /* */   "#80112233445566778899AABBCCDDEEFF"
+        /* */    "000102030405060708090A0B0C0D0E0F"
+        /* */    "000102030405060708090A0B0C0D0E0F"
+        /* */    "000102030405060708090A0B0C0D0E0F#))",
+        0
+      },
       { 0, NULL }
     };
 
