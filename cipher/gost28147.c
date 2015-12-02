@@ -38,6 +38,11 @@
 #include "gost.h"
 #include "gost-sb.h"
 
+typedef struct {
+  u32 key[8];
+  const u32 *sbox;
+} GOST28147_context;
+
 static gcry_err_code_t
 gost_setkey (void *c, const byte *key, unsigned keylen)
 {
@@ -117,7 +122,7 @@ gost_encrypt_block (void *c, byte *outbuf, const byte *inbuf)
   return /* burn_stack */ burn + 6*sizeof(void*) /* func call */;
 }
 
-unsigned int _gcry_gost_enc_data (GOST28147_context *c, const u32 *key,
+unsigned int _gcry_gost_enc_data (const u32 *key,
     u32 *o1, u32 *o2, u32 n1, u32 n2, int cryptopro)
 {
   const u32 *sbox;
