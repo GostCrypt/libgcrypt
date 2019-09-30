@@ -657,7 +657,7 @@ _gcry_pk_util_free_encoding_ctx (struct pk_encoding_ctx *ctx)
    (<mpi>)
    or
    (data
-    [(flags [raw, direct, pkcs1, oaep, pss, no-blinding, rfc6979, eddsa])]
+    [(flags [raw, direct, pkcs1, oaep, pss, no-blinding, rfc6979, eddsa, gost])]
     [(hash <algo> <value>)]
     [(value <text>)]
     [(hash-algo <algo>)]
@@ -674,6 +674,7 @@ _gcry_pk_util_free_encoding_ctx (struct pk_encoding_ctx *ctx)
    LABEL is specific to OAEP.
 
    SALT-LENGTH is for PSS it is limited to 16384 bytes.
+   For GOST a SALT-LENGTH means the length of UKM in bits.
 
    RANDOM-OVERRIDE is used to replace random nonces for regression
    testing.  */
@@ -823,6 +824,26 @@ _gcry_pk_util_data_to_mpi (gcry_sexp_t input, gcry_mpi_t *ret_mpi,
       *ret_mpi = sexp_nth_mpi (lvalue, 1, GCRYMPI_FMT_USG);
       if (!*ret_mpi)
         rc = GPG_ERR_INV_OBJ;
+
+      if (parsed_flags & PUBKEY_FLAG_GOST)
+        {
+          gcry_sexp_t list;
+          /* Get SALT-LENGTH (UKM length). */
+          list = sexp_find_token (ldata, "salt-length", 0);
+          if (list)
+            {
+              s = sexp_nth_data (list, 1, &n);
+              if (!s)
+                {
+                  rc = GPG_ERR_NO_OBJ;
+                  goto leave;
+                }
+              ctx->saltlen = (unsigned int)strtoul (s, NULL, 10);
+              sexp_release (list);
+            }
+          else
+            ctx->saltlen = 0;
+        }
     }
   else if (ctx->encoding == PUBKEY_ENC_PKCS1 && lvalue
 	   && ctx->op == PUBKEY_OP_ENCRYPT)

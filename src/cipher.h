@@ -77,7 +77,7 @@ struct pk_encoding_ctx
   unsigned char *label;
   size_t labellen;
 
-  /* for PSS */
+  /* for PSS or GOST (UKM length in bits)*/
   size_t saltlen;
 
   int (* verify_cmp) (void *opaque, gcry_mpi_t tmp);

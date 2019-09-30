@@ -879,6 +879,7 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   gcry_mpi_t mpi_s = NULL;
   gcry_mpi_t mpi_e = NULL;
   gcry_mpi_t data = NULL;
+  gcry_mpi_t salt = NULL;
   mpi_ec_t ec = NULL;
   int flags = 0;
   int no_error_on_infinity;
@@ -922,6 +923,29 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
         mpi_clear_bit (data, i);
       mpi_set_highbit (data, ec->nbits - 1);
     }
+
+  /* For GOST extract the UKM value. If its length is unspecified
+     take 64 bits as default. */
+  if ((flags & PUBKEY_FLAG_GOST))
+    {
+      unsigned int ukm_blen = ctx.saltlen ? ctx.saltlen : 64;
+      if (_gcry_mpi_get_nbits (data) < ukm_blen)
+        {
+          rc = GPG_ERR_TOO_SHORT;
+          goto leave;
+        }
+      salt = _gcry_mpi_copy (data);
+      if (!salt)
+        {
+          rc = gpg_error_from_syserror ();
+          goto leave;
+        }
+      _gcry_mpi_clear_highbit (salt, ukm_blen);
+      if (DBG_CIPHER)
+        log_printmpi ("UKM: ", salt);
+      _gcry_mpi_rshift (data, data, ukm_blen);
+    }
+
   if (DBG_CIPHER)
     log_mpidump ("ecc_encrypt data", data);
 
@@ -956,6 +980,10 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
     /* R = kQ  <=>  R = kdG  */
     _gcry_mpi_ec_mul_point (&R, data, ec->Q, ec);
+
+    /* Multiply the resulting point by a salt value if any. */
+    if (salt)
+      _gcry_mpi_ec_mul_point (&R, salt, &R, ec);
 
     if (_gcry_mpi_ec_get_affine (x, y, &R, ec))
       {
@@ -1019,7 +1047,14 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   }
 
   if (!rc)
-    rc = sexp_build (r_ciph, NULL, "(enc-val(ecdh(s%m)(e%m)))", mpi_s, mpi_e);
+    {
+      if (DBG_CIPHER)
+        {
+          log_printmpi ("ecc_encrypt res", mpi_s);
+          log_printmpi ("ecc_encrypt public key e", mpi_e);
+        }
+      rc = sexp_build (r_ciph, NULL, "(enc-val(ecdh(s%m)(e%m)))", mpi_s, mpi_e);
+    }
 
  leave:
   _gcry_mpi_release (data);
@@ -1027,6 +1062,7 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   _gcry_mpi_release (mpi_e);
   _gcry_mpi_ec_free (ec);
   _gcry_pk_util_free_encoding_ctx (&ctx);
+  _gcry_mpi_release (salt);
   if (DBG_CIPHER)
     log_debug ("ecc_encrypt    => %s\n", gpg_strerror (rc));
   return rc;
@@ -1052,6 +1088,7 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   mpi_point_struct kG;
   mpi_point_struct R;
   gcry_mpi_t r = NULL;
+  gcry_mpi_t salt = NULL;
   int flags = 0;
   int enable_specific_point_validation;
 
@@ -1100,6 +1137,32 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   else
     enable_specific_point_validation = 0;
 
+  /* For GOST extract the UKM value. */
+  if ((flags & PUBKEY_FLAG_GOST) || 0 == strncmp ("GOST", sk.E.name, 4))
+    {
+      // FIXME: Expect an uncompressed point format 0x04...
+      int key_len = 2*nbits/8 + 1;
+      int data_len = (_gcry_mpi_get_nbits (data_e)+7)/8;
+      int ukm_blen = (data_len - key_len) * 8;
+      if (ukm_blen < 64)
+        {
+          rc = GPG_ERR_TOO_SHORT;
+          goto leave;
+        }
+      salt = _gcry_mpi_copy (data_e);
+      if (!salt)
+        {
+          rc = gpg_error_from_syserror ();
+          goto leave;
+        }
+      _gcry_mpi_clear_highbit (salt, ukm_blen);
+      if (DBG_CIPHER)
+        log_printmpi ("UKM: ", salt);
+      _gcry_mpi_rshift (data_e, data_e, ukm_blen);
+      if (DBG_CIPHER)
+        log_printmpi ("ecc_decrypt  d_e", data_e);
+    }
+
   /*
    * Compute the plaintext.
    */
@@ -1134,8 +1197,13 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       goto leave;
     }
 
+
   /* R = dkG */
   _gcry_mpi_ec_mul_point (&R, ec->d, &kG, ec);
+
+  /* Multiply the resulting point by a salt value if any. */
+  if (salt)
+    _gcry_mpi_ec_mul_point (&R, salt, &R, ec);
 
   /* The following is false: assert( mpi_cmp_ui( R.x, 1 )==0 );, so:  */
   {
@@ -1212,6 +1280,7 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   sexp_release (l1);
   _gcry_mpi_ec_free (ec);
   _gcry_pk_util_free_encoding_ctx (&ctx);
+  _gcry_mpi_release (salt);
   if (DBG_CIPHER)
     log_debug ("ecc_decrypt    => %s\n", gpg_strerror (rc));
   return rc;
