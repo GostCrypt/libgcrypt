@@ -526,10 +526,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
 	  err = GPG_ERR_INV_CIPHER_MODE;
 	break;
 
-      case GCRY_CIPHER_MODE_ECB:
-      case GCRY_CIPHER_MODE_CBC:
       case GCRY_CIPHER_MODE_CFB:
       case GCRY_CIPHER_MODE_CFB8:
+        if (!spec->encrypt)
+          err = GPG_ERR_INV_CIPHER_MODE;
+        break;
+
+      case GCRY_CIPHER_MODE_ECB:
+      case GCRY_CIPHER_MODE_CBC:
       case GCRY_CIPHER_MODE_OFB:
       case GCRY_CIPHER_MODE_CTR:
       case GCRY_CIPHER_MODE_AESWRAP:
