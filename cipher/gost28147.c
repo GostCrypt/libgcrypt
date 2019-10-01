@@ -46,6 +46,46 @@ static const byte CryptoProKeyMeshingKey[] = {
     0xC0, 0x86, 0xDC, 0xC2, 0xEF, 0x4C, 0xA9, 0x2B
 };
 
+static void
+gost_set_keymeshing (GOST28147_context *ctx, int flag)
+{
+  if (flag)
+    {
+      ctx->mesh_limit = 1024;
+    }
+  else
+    {
+      ctx->mesh_limit = 0;
+    }
+}
+
+static void
+gost_set_mode (void *c, int mode)
+{
+  GOST28147_context *ctx = c;
+  ctx->mode = mode;
+
+  switch (mode)
+    {
+    case GCRY_CIPHER_MODE_CFB:
+      gost_set_keymeshing (ctx, 1);
+      break;
+
+    default:
+      gost_set_keymeshing (ctx, 0);
+    }
+}
+
+static void
+gost_set_sbox (GOST28147_context *ctx, int index)
+{
+  ctx->sbox = gost_oid_map[index].sbox;
+  if (gost_oid_map[index].keymeshing)
+    gost_set_mode (ctx, ctx->mode);
+  else
+    gost_set_keymeshing (ctx, 0);
+}
+
 static gcry_err_code_t
 gost_setkey (void *c, const byte *key, unsigned keylen,
              gcry_cipher_hd_t hd)
@@ -59,7 +99,7 @@ gost_setkey (void *c, const byte *key, unsigned keylen,
     return GPG_ERR_INV_KEYLEN;
 
   if (!ctx->sbox)
-    ctx->sbox = sbox_test_3411;
+    gost_set_sbox (ctx, 0);
 
   for (i = 0; i < 8; i++)
     {
@@ -181,7 +221,7 @@ gost_decrypt_block (void *c, byte *outbuf, const byte *inbuf)
 }
 
 static gpg_err_code_t
-gost_set_sbox (GOST28147_context *ctx, const char *oid)
+gost_set_sbox_oid (GOST28147_context *ctx, const char *oid)
 {
   int i;
 
@@ -189,28 +229,11 @@ gost_set_sbox (GOST28147_context *ctx, const char *oid)
     {
       if (!strcmp(gost_oid_map[i].oid, oid))
         {
-          ctx->sbox = gost_oid_map[i].sbox;
+          gost_set_sbox (ctx, i);
           return 0;
         }
     }
   return GPG_ERR_VALUE_NOT_FOUND;
-}
-
-static void
-gost_set_mode (void *c, int mode)
-{
-  GOST28147_context *ctx = c;
-  ctx->mode = mode;
-
-  switch (mode)
-    {
-    case GCRY_CIPHER_MODE_CFB:
-      ctx->mesh_limit = 1024;
-      break;
-
-    default:
-      ctx->mesh_limit = 0;
-    }
 }
 
 static gpg_err_code_t
@@ -225,7 +248,7 @@ gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
   switch (what)
     {
     case GCRYCTL_SET_SBOX:
-      ec = gost_set_sbox (ctx, buffer);
+      ec = gost_set_sbox_oid (ctx, buffer);
       break;
 
     case GCRYCTL_SET_MODE:

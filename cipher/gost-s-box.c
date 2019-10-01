@@ -242,11 +242,11 @@ int main(int argc, char **argv)
       fprintf (f, "\n  };\n\n");
     }
 
-  fprintf (f, "static struct\n{\n  const char *oid;\n  const u32 *sbox;\n} gost_oid_map[] = {\n");
+  fprintf (f, "static struct\n{\n  const char *oid;\n  const u32 *sbox;\n  const int keymeshing;\n} gost_oid_map[] = {\n");
 
   for (s = 0; s < DIM(gost_sboxes); s++)
     {
-      fprintf (f, "  { \"%s\", sbox_%s },\n", gost_sboxes[s].oid, gost_sboxes[s].name );
+      fprintf (f, "  { \"%s\", sbox_%s, %d },\n", gost_sboxes[s].oid, gost_sboxes[s].name, (s > 2) );
     }
 
   fprintf(f, "  { NULL, NULL }\n};\n");
