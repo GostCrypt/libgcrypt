@@ -39,6 +39,13 @@
 #include "gost.h"
 #include "gost-sb.h"
 
+static const byte CryptoProKeyMeshingKey[] = {
+    0x69, 0x00, 0x72, 0x22, 0x64, 0xC9, 0x04, 0x23,
+    0x8D, 0x3A, 0xDB, 0x96, 0x46, 0xE9, 0x2A, 0xC4,
+    0x18, 0xFE, 0xAC, 0x94, 0x00, 0xED, 0x07, 0x12,
+    0xC0, 0x86, 0xDC, 0xC2, 0xEF, 0x4C, 0xA9, 0x2B
+};
+
 static gcry_err_code_t
 gost_setkey (void *c, const byte *key, unsigned keylen,
              gcry_cipher_hd_t hd)
@@ -60,7 +67,6 @@ gost_setkey (void *c, const byte *key, unsigned keylen,
     }
 
   ctx->mesh_counter = 0;
-  ctx->mesh_limit = 0;
 
   return GPG_ERR_NO_ERROR;
 }
@@ -190,6 +196,23 @@ gost_set_sbox (GOST28147_context *ctx, const char *oid)
   return GPG_ERR_VALUE_NOT_FOUND;
 }
 
+static void
+gost_set_mode (void *c, int mode)
+{
+  GOST28147_context *ctx = c;
+  ctx->mode = mode;
+
+  switch (mode)
+    {
+    case GCRY_CIPHER_MODE_CFB:
+      ctx->mesh_limit = 1024;
+      break;
+
+    default:
+      ctx->mesh_limit = 0;
+    }
+}
+
 static gpg_err_code_t
 gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
 {
@@ -205,19 +228,17 @@ gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
       ec = gost_set_sbox (ctx, buffer);
       break;
 
+    case GCRYCTL_SET_MODE:
+      if (buflen == sizeof (int))
+        gost_set_mode (c, *((int *) buffer));
+      break;
+
     default:
       ec = GPG_ERR_INV_OP;
       break;
     }
   return ec;
 }
-
-static const byte CryptoProKeyMeshingKey[] = {
-    0x69, 0x00, 0x72, 0x22, 0x64, 0xC9, 0x04, 0x23,
-    0x8D, 0x3A, 0xDB, 0x96, 0x46, 0xE9, 0x2A, 0xC4,
-    0x18, 0xFE, 0xAC, 0x94, 0x00, 0xED, 0x07, 0x12,
-    0xC0, 0x86, 0xDC, 0xC2, 0xEF, 0x4C, 0xA9, 0x2B
-};
 
 /* Implements key meshing algorithm by modifing ctx and returning new IV.
    Thanks to Dmitry Belyavskiy. */
@@ -233,19 +254,6 @@ cryptopro_key_meshing (GOST28147_context *ctx, unsigned char *newiv,
     memcpy (ctx->key, newkey, 32);
     /* Encrypt iv with new key */
     gost_encrypt_block (ctx, newiv, iv);
-}
-
-static gcry_err_code_t
-gost_setkey_mesh (void *c, const byte *key, unsigned keylen)
-{
-  GOST28147_context *ctx = c;
-  gcry_err_code_t ret;
-
-  ret = gost_setkey (c, key, keylen);
-
-  ctx->mesh_limit = 1024;
-
-  return ret;
 }
 
 static unsigned int
@@ -282,7 +290,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_gost28147 =
     GCRY_CIPHER_GOST28147, {0, 0},
     "GOST28147", NULL, oids_gost28147, 8, 256,
     sizeof (GOST28147_context),
-    gost_setkey_mesh,
+    gost_setkey,
     gost_encrypt_block_mesh,
     gost_decrypt_block,
     NULL, NULL, NULL, gost_set_extra_info,

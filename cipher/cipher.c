@@ -708,6 +708,12 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
               break;
 #endif /*USE_TWOFISH*/
 
+            case GCRY_CIPHER_GOST28147:
+              err = _gcry_cipher_ctl (h, GCRYCTL_SET_MODE,
+                                      &mode, sizeof (mode));
+              if (err) goto done;
+              break;
+
             default:
               break;
             }
@@ -736,8 +742,14 @@ _gcry_cipher_open_internal (gcry_cipher_hd_t *handle,
     }
 
   /* Done.  */
-
-  *handle = err ? NULL : h;
+ done:
+  if (err)
+    {
+      xfree (h);
+      *handle = NULL;
+    }
+  else
+    *handle = h;
 
   return err;
 }
@@ -1589,9 +1601,10 @@ _gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer, size_t buflen)
       break;
 
     case GCRYCTL_SET_SBOX:
+    case GCRYCTL_SET_MODE:
       if (h->spec->set_extra_info)
         rc = h->spec->set_extra_info
-          (&h->context.c, GCRYCTL_SET_SBOX, buffer, buflen);
+          (&h->context.c, cmd, buffer, buflen);
       else
         rc = GPG_ERR_NOT_SUPPORTED;
       break;
