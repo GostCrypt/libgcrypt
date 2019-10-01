@@ -77,7 +77,7 @@ gost_set_mode (void *c, int mode)
 }
 
 static void
-gost_set_sbox (GOST28147_context *ctx, int index)
+gost_do_set_sbox (GOST28147_context *ctx, int index)
 {
   ctx->sbox = gost_oid_map[index].sbox;
   if (gost_oid_map[index].keymeshing)
@@ -99,7 +99,7 @@ gost_setkey (void *c, const byte *key, unsigned keylen,
     return GPG_ERR_INV_KEYLEN;
 
   if (!ctx->sbox)
-    gost_set_sbox (ctx, 0);
+    gost_do_set_sbox (ctx, 0);
 
   for (i = 0; i < 8; i++)
     {
@@ -221,7 +221,7 @@ gost_decrypt_block (void *c, byte *outbuf, const byte *inbuf)
 }
 
 static gpg_err_code_t
-gost_set_sbox_oid (GOST28147_context *ctx, const char *oid)
+gost_set_sbox (GOST28147_context *ctx, const char *oid)
 {
   int i;
 
@@ -229,7 +229,7 @@ gost_set_sbox_oid (GOST28147_context *ctx, const char *oid)
     {
       if (!strcmp(gost_oid_map[i].oid, oid))
         {
-          gost_set_sbox (ctx, i);
+          gost_do_set_sbox (ctx, i);
           return 0;
         }
     }
@@ -248,7 +248,7 @@ gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
   switch (what)
     {
     case GCRYCTL_SET_SBOX:
-      ec = gost_set_sbox_oid (ctx, buffer);
+      ec = gost_set_sbox (ctx, buffer);
       break;
 
     case GCRYCTL_SET_MODE:
