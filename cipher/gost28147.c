@@ -23,10 +23,10 @@
  * - OFB-like mode with additional transformation on keystream
  *   RFC 5830 names this 'counter encryption' mode
  *   Original GOST text uses the term 'gammirovanie'
- * - MAC mode
+ * - MAC mode ('imitovstavka')
  *
  * This implementation handles ECB and CFB modes via usual libgcrypt handling.
- * OFB-like and MAC modes are unsupported.
+ * OFB-like modes are unsupported.
  */
 
 #include <config.h>
