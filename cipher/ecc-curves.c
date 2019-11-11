@@ -104,6 +104,7 @@ static const struct
     { "GOST2001-CryptoPro-C", "1.2.643.7.1.2.1.1.4" },
     { "GOST2001-CryptoPro-C", "GOST2012-256-tc26-D" },
 
+    { "GOST2012-512-test", " 1.2.643.7.1.2.1.2.0" },
     { "GOST2012-512-tc26-A", "GOST2012-tc26-A" },
     { "GOST2012-512-tc26-B", "GOST2012-tc26-B" },
     { "GOST2012-512-tc26-A", "1.2.643.7.1.2.1.2.1" },
