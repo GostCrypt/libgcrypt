@@ -39,6 +39,53 @@
 #include "gost.h"
 #include "gost-sb.h"
 
+static const byte CryptoProKeyMeshingKey[] = {
+    0x69, 0x00, 0x72, 0x22, 0x64, 0xC9, 0x04, 0x23,
+    0x8D, 0x3A, 0xDB, 0x96, 0x46, 0xE9, 0x2A, 0xC4,
+    0x18, 0xFE, 0xAC, 0x94, 0x00, 0xED, 0x07, 0x12,
+    0xC0, 0x86, 0xDC, 0xC2, 0xEF, 0x4C, 0xA9, 0x2B
+};
+
+static void
+gost_set_keymeshing (GOST28147_context *ctx, int flag)
+{
+  if (flag)
+    {
+      ctx->mesh_limit = 1024;
+    }
+  else
+    {
+      ctx->mesh_limit = 0;
+    }
+}
+
+static void
+gost_set_mode (void *c, int mode)
+{
+  GOST28147_context *ctx = c;
+  ctx->mode = mode;
+
+  switch (mode)
+    {
+    case GCRY_CIPHER_MODE_CFB:
+      gost_set_keymeshing (ctx, 1);
+      break;
+
+    default:
+      gost_set_keymeshing (ctx, 0);
+    }
+}
+
+static void
+gost_do_set_sbox (GOST28147_context *ctx, int index)
+{
+  ctx->sbox = gost_oid_map[index].sbox;
+  if (gost_oid_map[index].keymeshing)
+    gost_set_mode (ctx, ctx->mode);
+  else
+    gost_set_keymeshing (ctx, 0);
+}
+
 static gcry_err_code_t
 gost_setkey (void *c, const byte *key, unsigned keylen,
              gcry_cipher_hd_t hd)
@@ -52,12 +99,15 @@ gost_setkey (void *c, const byte *key, unsigned keylen,
     return GPG_ERR_INV_KEYLEN;
 
   if (!ctx->sbox)
-    ctx->sbox = sbox_test_3411;
+    gost_do_set_sbox (ctx, 0);
 
   for (i = 0; i < 8; i++)
     {
       ctx->key[i] = buf_get_le32(&key[4*i]);
     }
+
+  ctx->mesh_counter = 0;
+
   return GPG_ERR_NO_ERROR;
 }
 
@@ -190,7 +240,7 @@ gost_set_sbox (GOST28147_context *ctx, const char *oid)
     {
       if (!strcmp(gost_oid_map[i].oid, oid))
         {
-          ctx->sbox = gost_oid_map[i].sbox;
+          gost_do_set_sbox (ctx, i);
           return 0;
         }
     }
@@ -212,6 +262,11 @@ gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
       ec = gost_set_sbox (ctx, buffer);
       break;
 
+    case GCRYCTL_SET_MODE:
+      if (buflen == sizeof (int))
+        gost_set_mode (c, *((int *) buffer));
+      break;
+
     default:
       ec = GPG_ERR_INV_OP;
       break;
@@ -219,8 +274,43 @@ gost_set_extra_info (void *c, int what, const void *buffer, size_t buflen)
   return ec;
 }
 
+/* Implements key meshing algorithm by modifing ctx and returning new IV.
+   Thanks to Dmitry Belyavskiy. */
+static void
+cryptopro_key_meshing (GOST28147_context *ctx, unsigned char *newiv,
+                       const unsigned char *iv)
+{
+    unsigned char newkey[32];
+    /* "Decrypt" the static keymeshing key */
+    for (int i = 0; i < 4; i++)
+      gost_decrypt_block (ctx, newkey + i*8, CryptoProKeyMeshingKey + i*8);
+    /* Set new key */
+    memcpy (ctx->key, newkey, 32);
+    /* Encrypt iv with new key */
+    gost_encrypt_block (ctx, newiv, iv);
+}
+
+static unsigned int
+gost_encrypt_block_mesh (void *c, byte *outbuf, const byte *inbuf)
+{
+  GOST28147_context *ctx = c;
+
+  if (ctx->mesh_limit && ctx->mesh_counter == ctx->mesh_limit)
+    {
+      cryptopro_key_meshing (ctx, outbuf, inbuf);
+      ctx->mesh_counter = 8;
+      return gost_encrypt_block (c, outbuf, outbuf);
+    }
+  else
+    {
+      ctx->mesh_counter += 8;
+      return gost_encrypt_block (c, outbuf, inbuf);
+    }
+}
+
 static gcry_cipher_oid_spec_t oids_gost28147[] =
   {
+    { "1.2.643.2.2.21", GCRY_CIPHER_MODE_CFB },
     /* { "1.2.643.2.2.31.0", GCRY_CIPHER_MODE_CNTGOST }, */
     { "1.2.643.2.2.31.1", GCRY_CIPHER_MODE_CFB },
     { "1.2.643.2.2.31.2", GCRY_CIPHER_MODE_CFB },
@@ -235,7 +325,7 @@ gcry_cipher_spec_t _gcry_cipher_spec_gost28147 =
     "GOST28147", NULL, oids_gost28147, 8, 256,
     sizeof (GOST28147_context),
     gost_setkey,
-    gost_encrypt_block,
+    gost_encrypt_block_mesh,
     gost_decrypt_block,
     NULL, NULL, NULL, gost_set_extra_info,
   };
