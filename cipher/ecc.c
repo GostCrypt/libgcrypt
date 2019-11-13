@@ -855,20 +855,30 @@ ecc_verify (gcry_sexp_t s_sig, gcry_sexp_t s_data, gcry_sexp_t s_keyparms)
  *    dG - public long-term key
  *     k - ephemeral scalar
  *    kG - ephemeral public key
- *   dkG - shared secret
+ *     S - optional salt value currently used with GOST
+ *  kSdG - shared secret
  *
  * ecc_encrypt_raw description:
- *   input:
- *     data[0] : private scalar (k)
+ *   input: An S-expression with:
+ *     a private scalar (k)
+ *     an optional salt value (S)
  *   output: A new S-expression with the parameters:
- *     s : shared point (kdG)
+ *     s : shared point (kSdG)
  *     e : generated ephemeral public key (kG)
+ *
+ * For information about the format of the input S-expression
+ * see _gcry_pk_util_data_to_mpi().
  *
  * ecc_decrypt_raw description:
  *   input:
- *     data[0] : a point kG (ephemeral public key)
+ *     data[0] : a point kG (ephemeral public key) with an optional
+ *               salt value (S)
  *   output:
- *     result[0] : shared point (kdG)
+ *     result[0] : shared point (kSdG)
+ *
+ * The input format of the salt value to be used with ecc_decrypt_raw()
+ * depends on the underlying public key algorithm. For GOST keys, the salt
+ * value should be passed in the low bits of the input MPI value.
  */
 static gcry_err_code_t
 ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
@@ -1070,9 +1080,10 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
 
 
 /*  input:
- *     data[0] : a point kG (ephemeral public key)
+ *     data[0] : a point kG (ephemeral public key) with an optional
+ *               salt value (S)
  *   output:
- *     resaddr[0] : shared point kdG
+ *     resaddr[0] : shared point kSdG
  *
  *  see ecc_encrypt_raw for details.
  */
