@@ -97,8 +97,6 @@ static const struct
     { "GOST2001-CryptoPro-A", "1.2.643.2.2.36.0" },
     { "GOST2001-CryptoPro-C", "1.2.643.2.2.36.1" },
 
-    { "GOST2012-tc26-A", "1.2.643.7.1.2.1.2.1" },
-    { "GOST2012-tc26-B", "1.2.643.7.1.2.1.2.2" },
     { "GOST2012-256-tc26-A", "1.2.643.7.1.2.1.1.1" },
     { "GOST2001-CryptoPro-A", "1.2.643.7.1.2.1.1.2" },
     { "GOST2001-CryptoPro-A", "GOST2012-256-tc26-B" },
@@ -106,6 +104,8 @@ static const struct
     { "GOST2001-CryptoPro-B", "GOST2012-256-tc26-C" },
     { "GOST2001-CryptoPro-C", "1.2.643.7.1.2.1.1.4" },
     { "GOST2001-CryptoPro-C", "GOST2012-256-tc26-D" },
+    { "GOST2012-512-tc26-A", "1.2.643.7.1.2.1.2.1" },
+    { "GOST2012-512-tc26-B", "1.2.643.7.1.2.1.2.2" },
 
     { "secp256k1", "1.3.132.0.10" },
 
@@ -406,7 +406,7 @@ static const ecc_domain_parms_t domain_parms[] =
       "0x01"
     },
     {
-      "GOST2012-test", 511, 0,
+      "GOST2012-512-test", 511, 0,
       MPI_EC_WEIERSTRASS, ECC_DIALECT_STANDARD,
       "0x4531acd1fe0023c7550d267b6b2fee80922b14b2ffb90f04d4eb7c09b5d2d15d"
       "f1d852741af4704a0458047e80e4546d35b8336fac224dd81664bbf528be6373",
@@ -423,7 +423,7 @@ static const ecc_domain_parms_t domain_parms[] =
       "0x01"
     },
     {
-      "GOST2012-tc26-A", 512, 0,
+      "GOST2012-512-tc26-A", 512, 0,
       MPI_EC_WEIERSTRASS, ECC_DIALECT_STANDARD,
       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdc7",
@@ -440,7 +440,7 @@ static const ecc_domain_parms_t domain_parms[] =
       "0x01"
     },
     {
-      "GOST2012-tc26-B", 512, 0,
+      "GOST2012-512-tc26-B", 512, 0,
       MPI_EC_WEIERSTRASS, ECC_DIALECT_STANDARD,
       "0x8000000000000000000000000000000000000000000000000000000000000000"
         "000000000000000000000000000000000000000000000000000000000000006f",
