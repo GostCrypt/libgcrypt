@@ -1208,7 +1208,6 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
       goto leave;
     }
 
-
   /* R = dkG */
   _gcry_mpi_ec_mul_point (&R, ec->d, &kG, ec);
 
