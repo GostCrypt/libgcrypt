@@ -1149,7 +1149,7 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     enable_specific_point_validation = 0;
 
   /* For GOST extract the UKM value. */
-  if ((flags & PUBKEY_FLAG_GOST) || 0 == strncmp ("GOST", sk.E.name, 4))
+  if ((flags & PUBKEY_FLAG_GOST))
     {
       /* FIXME: Expect an uncompressed point format 0x04... */
       int key_len = 2*nbits/8 + 1;
