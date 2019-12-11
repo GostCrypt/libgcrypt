@@ -992,7 +992,7 @@ ecc_encrypt_raw (gcry_sexp_t *r_ciph, gcry_sexp_t s_data, gcry_sexp_t keyparms)
     _gcry_mpi_ec_mul_point (&R, data, ec->Q, ec);
 
     /* Multiply the resulting point by a salt value if any. */
-    if (salt)
+    if (salt && gcry_mpi_cmp_ui (salt, 0))
       _gcry_mpi_ec_mul_point (&R, salt, &R, ec);
 
     if (_gcry_mpi_ec_get_affine (x, y, &R, ec))
@@ -1212,7 +1212,7 @@ ecc_decrypt_raw (gcry_sexp_t *r_plain, gcry_sexp_t s_data, gcry_sexp_t keyparms)
   _gcry_mpi_ec_mul_point (&R, ec->d, &kG, ec);
 
   /* Multiply the resulting point by a salt value if any. */
-  if (salt)
+  if (salt && gcry_mpi_cmp_ui (salt, 0))
     _gcry_mpi_ec_mul_point (&R, salt, &R, ec);
 
   /* The following is false: assert( mpi_cmp_ui( R.x, 1 )==0 );, so:  */
