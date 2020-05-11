@@ -97,6 +97,12 @@ AH_TOP([
 AH_BOTTOM([
 #define _GCRYPT_IN_LIBGCRYPT 1
 
+/* Add .note.gnu.property section for Intel CET in assembler sources
+   when CET is enabled.  */
+#if defined(__ASSEMBLER__) && defined(__CET__)
+# include <cet.h>
+#endif
+
 /* If the configure check for endianness has been disabled, get it from
    OS macros.  This is intended for making fat binary builds on OS X.  */
 #ifdef DISABLED_ENDIAN_CHECK
@@ -834,7 +840,6 @@ AC_TYPE_PID_T
 
 GNUPG_CHECK_TYPEDEF(byte, HAVE_BYTE_TYPEDEF)
 GNUPG_CHECK_TYPEDEF(ushort, HAVE_USHORT_TYPEDEF)
-GNUPG_CHECK_TYPEDEF(ulong, HAVE_ULONG_TYPEDEF)
 GNUPG_CHECK_TYPEDEF(u16, HAVE_U16_TYPEDEF)
 GNUPG_CHECK_TYPEDEF(u32, HAVE_U32_TYPEDEF)
 
@@ -2546,7 +2551,8 @@ LIST_MEMBER(ecc, $enabled_pubkey_ciphers)
 if test "$found" = "1" ; then
    GCRYPT_PUBKEY_CIPHERS="$GCRYPT_PUBKEY_CIPHERS \
                           ecc.lo ecc-curves.lo ecc-misc.lo \
-                          ecc-ecdh.lo ecc-ecdsa.lo ecc-eddsa.lo ecc-gost.lo"
+                          ecc-ecdh.lo ecc-ecdsa.lo ecc-eddsa.lo ecc-gost.lo \
+                          ecc-sm2.lo"
    AC_DEFINE(USE_ECC, 1, [Defined if this module should be included])
 fi
 

@@ -33,6 +33,10 @@
 #define PGM "basic"
 #include "t-common.h"
 
+#if __GNUC__ >= 4
+#  define ALWAYS_INLINE __attribute__((always_inline))
+#endif
+
 typedef struct test_spec_pubkey_key
 {
   const char *secret;
@@ -191,7 +195,7 @@ show_mac_not_available (int algo)
 
 
 
-void
+static void
 progress_handler (void *cb_data, const char *what, int printchar,
 		  int current, int total)
 {
@@ -206,6 +210,239 @@ progress_handler (void *cb_data, const char *what, int printchar,
     putchar (printchar);
   fflush (stdout);
 }
+
+
+#if defined(__x86_64__) && defined(HAVE_GCC_INLINE_ASM_SSSE3) && \
+    (defined(HAVE_COMPATIBLE_GCC_AMD64_PLATFORM_AS) || \
+     defined(HAVE_COMPATIBLE_GCC_WIN64_PLATFORM_AS))
+# define CLUTTER_VECTOR_REGISTER_AMD64 1
+# define CLUTTER_VECTOR_REGISTER_COUNT 16
+#elif defined(__i386__) && SIZEOF_UNSIGNED_LONG == 4 && __GNUC__ >= 4 && \
+      defined(HAVE_GCC_INLINE_ASM_SSSE3)
+# define CLUTTER_VECTOR_REGISTER_I386 1
+# define CLUTTER_VECTOR_REGISTER_COUNT 8
+#elif defined(HAVE_COMPATIBLE_GCC_AARCH64_PLATFORM_AS) && \
+      defined(HAVE_GCC_INLINE_ASM_AARCH64_NEON) && \
+      (defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON))
+# define CLUTTER_VECTOR_REGISTER_AARCH64 1
+# define CLUTTER_VECTOR_REGISTER_COUNT 32
+#elif defined(HAVE_COMPATIBLE_GCC_ARM_PLATFORM_AS) && \
+      defined(HAVE_GCC_INLINE_ASM_NEON) && \
+      (defined(__ARM_FEATURE_SIMD32) || defined(__ARM_NEON))
+# define CLUTTER_VECTOR_REGISTER_NEON 1
+# define CLUTTER_VECTOR_REGISTER_COUNT 16
+#endif
+
+
+#ifdef CLUTTER_VECTOR_REGISTER_COUNT
+static void
+prepare_vector_data(unsigned char data[CLUTTER_VECTOR_REGISTER_COUNT][16])
+{
+  static unsigned char basedata[16] =
+  {
+    0xd7, 0xfe, 0x5c, 0x4b, 0x58, 0xfe, 0xf4, 0xb6,
+    0xed, 0x2f, 0x31, 0xc9, 0x1d, 0xd3, 0x62, 0x8d
+  };
+  int j, i;
+
+  for (i = 0; i < CLUTTER_VECTOR_REGISTER_COUNT; i++)
+    {
+      for (j = 0; j < 16; j++)
+	{
+	  data[i][j] = basedata[(i + j) % 16];
+	}
+
+      for (j = 0; j < 16; j++)
+	{
+	  basedata[j] -= j;
+	}
+    }
+}
+#endif
+
+
+static inline ALWAYS_INLINE void
+clutter_vector_registers(void)
+{
+#ifdef CLUTTER_VECTOR_REGISTER_COUNT
+  unsigned char data[CLUTTER_VECTOR_REGISTER_COUNT][16];
+#if defined(CLUTTER_VECTOR_REGISTER_AARCH64) || \
+    defined(CLUTTER_VECTOR_REGISTER_NEON)
+  static int init;
+  static int have_neon;
+
+  if (!init)
+    {
+      char *string;
+
+      string = gcry_get_config (0, "hwflist");
+      if (string)
+	{
+	  have_neon = (strstr(string, "arm-neon:") != NULL);
+	  xfree(string);
+	}
+      init = 1;
+    }
+
+  if (!have_neon)
+    return;
+#elif defined(CLUTTER_VECTOR_REGISTER_I386)
+  static int init;
+  static int have_ssse3;
+
+  if (!init)
+    {
+      char *string;
+
+      string = gcry_get_config (0, "hwflist");
+      if (string)
+	{
+	  have_ssse3 = (strstr(string, "intel-ssse3:") != NULL);
+	  xfree(string);
+	}
+      init = 1;
+    }
+
+  if (!have_ssse3)
+    return;
+#endif
+
+  prepare_vector_data(data);
+
+#if defined(CLUTTER_VECTOR_REGISTER_AMD64)
+  asm volatile("movdqu %[data0], %%xmm0\n"
+	       "movdqu %[data1], %%xmm1\n"
+	       "movdqu %[data2], %%xmm2\n"
+	       "movdqu %[data3], %%xmm3\n"
+	       "movdqu %[data4], %%xmm4\n"
+	       "movdqu %[data5], %%xmm5\n"
+	       "movdqu %[data6], %%xmm6\n"
+	       "movdqu %[data7], %%xmm7\n"
+	       "movdqu %[data8], %%xmm8\n"
+	       "movdqu %[data9], %%xmm9\n"
+	       "movdqu %[data10], %%xmm10\n"
+	       "movdqu %[data11], %%xmm11\n"
+	       "movdqu %[data12], %%xmm12\n"
+	       "movdqu %[data13], %%xmm13\n"
+	       "movdqu %[data14], %%xmm14\n"
+	       "movdqu %[data15], %%xmm15\n"
+	      :
+	      : [data0] "m" (*data[0]),
+	        [data1] "m" (*data[1]),
+	        [data2] "m" (*data[2]),
+	        [data3] "m" (*data[3]),
+	        [data4] "m" (*data[4]),
+	        [data5] "m" (*data[5]),
+	        [data6] "m" (*data[6]),
+	        [data7] "m" (*data[7]),
+	        [data8] "m" (*data[8]),
+	        [data9] "m" (*data[9]),
+	        [data10] "m" (*data[10]),
+	        [data11] "m" (*data[11]),
+	        [data12] "m" (*data[12]),
+	        [data13] "m" (*data[13]),
+	        [data14] "m" (*data[14]),
+	        [data15] "m" (*data[15])
+	      : "memory"
+#ifdef __SSE2__
+	       ,"xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+	        "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14",
+	        "xmm15"
+#endif
+	      );
+#elif defined(CLUTTER_VECTOR_REGISTER_I386)
+  asm volatile("movdqu %[data0], %%xmm0\n"
+	       "movdqu %[data1], %%xmm1\n"
+	       "movdqu %[data2], %%xmm2\n"
+	       "movdqu %[data3], %%xmm3\n"
+	       "movdqu %[data4], %%xmm4\n"
+	       "movdqu %[data5], %%xmm5\n"
+	       "movdqu %[data6], %%xmm6\n"
+	       "movdqu %[data7], %%xmm7\n"
+	      :
+	      : [data0] "m" (*data[0]),
+	        [data1] "m" (*data[1]),
+	        [data2] "m" (*data[2]),
+	        [data3] "m" (*data[3]),
+	        [data4] "m" (*data[4]),
+	        [data5] "m" (*data[5]),
+	        [data6] "m" (*data[6]),
+	        [data7] "m" (*data[7])
+	      : "memory"
+#ifdef __SSE2__
+	       ,"xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"
+#endif
+	      );
+#elif defined(CLUTTER_VECTOR_REGISTER_AARCH64)
+  asm volatile("mov x0, %[ptr]\n"
+	       "ld1 {v0.16b}, [x0], #16\n"
+	       "ld1 {v1.16b}, [x0], #16\n"
+	       "ld1 {v2.16b}, [x0], #16\n"
+	       "ld1 {v3.16b}, [x0], #16\n"
+	       "ld1 {v4.16b}, [x0], #16\n"
+	       "ld1 {v5.16b}, [x0], #16\n"
+	       "ld1 {v6.16b}, [x0], #16\n"
+	       "ld1 {v7.16b}, [x0], #16\n"
+	       "ld1 {v8.16b}, [x0], #16\n"
+	       "ld1 {v9.16b}, [x0], #16\n"
+	       "ld1 {v10.16b}, [x0], #16\n"
+	       "ld1 {v11.16b}, [x0], #16\n"
+	       "ld1 {v12.16b}, [x0], #16\n"
+	       "ld1 {v13.16b}, [x0], #16\n"
+	       "ld1 {v14.16b}, [x0], #16\n"
+	       "ld1 {v15.16b}, [x0], #16\n"
+	       "ld1 {v16.16b}, [x0], #16\n"
+	       "ld1 {v17.16b}, [x0], #16\n"
+	       "ld1 {v18.16b}, [x0], #16\n"
+	       "ld1 {v19.16b}, [x0], #16\n"
+	       "ld1 {v20.16b}, [x0], #16\n"
+	       "ld1 {v21.16b}, [x0], #16\n"
+	       "ld1 {v22.16b}, [x0], #16\n"
+	       "ld1 {v23.16b}, [x0], #16\n"
+	       "ld1 {v24.16b}, [x0], #16\n"
+	       "ld1 {v25.16b}, [x0], #16\n"
+	       "ld1 {v26.16b}, [x0], #16\n"
+	       "ld1 {v27.16b}, [x0], #16\n"
+	       "ld1 {v28.16b}, [x0], #16\n"
+	       "ld1 {v29.16b}, [x0], #16\n"
+	       "ld1 {v30.16b}, [x0], #16\n"
+	       "ld1 {v31.16b}, [x0], #16\n"
+	       :
+	       : [ptr] "r" (data)
+	       : "x0", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
+	         "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+	         "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+	         "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
+	         "memory");
+#elif defined(CLUTTER_VECTOR_REGISTER_NEON)
+  asm volatile("mov r0, %[ptr]\n"
+	       "vld1.64 {q0}, [r0]!\n"
+	       "vld1.64 {q1}, [r0]!\n"
+	       "vld1.64 {q2}, [r0]!\n"
+	       "vld1.64 {q3}, [r0]!\n"
+	       "vld1.64 {q4}, [r0]!\n"
+	       "vld1.64 {q5}, [r0]!\n"
+	       "vld1.64 {q6}, [r0]!\n"
+	       "vld1.64 {q7}, [r0]!\n"
+	       "vld1.64 {q8}, [r0]!\n"
+	       "vld1.64 {q9}, [r0]!\n"
+	       "vld1.64 {q10}, [r0]!\n"
+	       "vld1.64 {q11}, [r0]!\n"
+	       "vld1.64 {q12}, [r0]!\n"
+	       "vld1.64 {q13}, [r0]!\n"
+	       "vld1.64 {q14}, [r0]!\n"
+	       "vld1.64 {q15}, [r0]!\n"
+	       :
+	       : [ptr] "r" (data)
+	       : "r0", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7",
+	         "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15",
+	         "memory");
+#endif
+
+#endif /* CLUTTER_VECTOR_REGISTER_COUNT */
+}
+
+
 
 static void
 check_cbc_mac_cipher (void)
@@ -8280,7 +8517,9 @@ check_bulk_cipher_modes (void)
           goto leave;
         }
 
+      clutter_vector_registers();
       err = gcry_cipher_setkey (hde, tv[i].key, tv[i].keylen);
+      clutter_vector_registers();
       if (!err)
         err = gcry_cipher_setkey (hdd, tv[i].key, tv[i].keylen);
       if (err)
@@ -8296,7 +8535,9 @@ check_bulk_cipher_modes (void)
           goto leave;
         }
 
+      clutter_vector_registers();
       err = gcry_cipher_setiv (hde, tv[i].iv, tv[i].ivlen);
+      clutter_vector_registers();
       if (!err)
         err = gcry_cipher_setiv (hdd, tv[i].iv,  tv[i].ivlen);
       if (err)
@@ -8309,6 +8550,7 @@ check_bulk_cipher_modes (void)
       for (j=0; j < buflen; j++)
         buffer[j] = ((j & 0xff) ^ ((j >> 8) & 0xff));
 
+      clutter_vector_registers();
       err = gcry_cipher_encrypt (hde, outbuf, buflen, buffer, buflen);
       if (err)
         {
@@ -8330,6 +8572,7 @@ check_bulk_cipher_modes (void)
         fail ("encrypt mismatch (algo %d, mode %d)\n",
               tv[i].algo, tv[i].mode);
 
+      clutter_vector_registers();
       err = gcry_cipher_decrypt (hdd, outbuf, buflen, NULL, 0);
       if (err)
         {
@@ -8409,6 +8652,7 @@ check_one_cipher_core_reset (gcry_cipher_hd_t hd, int algo, int mode, int pass,
 
   if (mode == GCRY_CIPHER_MODE_OCB || mode == GCRY_CIPHER_MODE_CCM)
     {
+      clutter_vector_registers();
       err = gcry_cipher_setiv (hd, iv, sizeof(iv));
       if (err)
         {
@@ -8535,6 +8779,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       goto err_out_free;
     }
 
+  clutter_vector_registers();
   err = gcry_cipher_setkey (hd, key, keylen);
   if (err)
     {
@@ -8547,6 +8792,7 @@ check_one_cipher_core (int algo, int mode, int flags,
   if (check_one_cipher_core_reset (hd, algo, mode, pass, nplain) < 0)
     goto err_out_free;
 
+  clutter_vector_registers();
   err = gcry_cipher_encrypt (hd, out, nplain, plain, nplain);
   if (err)
     {
@@ -8558,6 +8804,7 @@ check_one_cipher_core (int algo, int mode, int flags,
 
   if (taglen > 0)
     {
+      clutter_vector_registers();
       err = gcry_cipher_gettag (hd, tag, taglen);
       if (err)
 	{
@@ -8575,6 +8822,7 @@ check_one_cipher_core (int algo, int mode, int flags,
   if (check_one_cipher_core_reset (hd, algo, mode, pass, nplain) < 0)
     goto err_out_free;
 
+  clutter_vector_registers();
   err = gcry_cipher_decrypt (hd, in, nplain, out, nplain);
   if (err)
     {
@@ -8586,6 +8834,7 @@ check_one_cipher_core (int algo, int mode, int flags,
 
   if (taglen > 0)
     {
+      clutter_vector_registers();
       err = gcry_cipher_checktag (hd, tag_result, taglen);
       if (err)
 	{
@@ -8605,6 +8854,7 @@ check_one_cipher_core (int algo, int mode, int flags,
     goto err_out_free;
 
   memcpy (out, plain, nplain);
+  clutter_vector_registers();
   err = gcry_cipher_encrypt (hd, out, nplain, NULL, 0);
   if (err)
     {
@@ -8639,6 +8889,7 @@ check_one_cipher_core (int algo, int mode, int flags,
   if (check_one_cipher_core_reset (hd, algo, mode, pass, nplain) < 0)
     goto err_out_free;
 
+  clutter_vector_registers();
   err = gcry_cipher_decrypt (hd, out, nplain, NULL, 0);
   if (err)
     {
@@ -8651,6 +8902,7 @@ check_one_cipher_core (int algo, int mode, int flags,
 
   if (taglen > 0)
     {
+      clutter_vector_registers();
       err = gcry_cipher_checktag (hd, tag_result, taglen);
       if (err)
 	{
@@ -8677,6 +8929,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       if (piecelen > nplain - pos)
         piecelen = nplain - pos;
 
+      clutter_vector_registers();
       err = gcry_cipher_encrypt (hd, out + pos, piecelen, plain + pos,
                                  piecelen);
       if (err)
@@ -8694,6 +8947,7 @@ check_one_cipher_core (int algo, int mode, int flags,
 
   if (taglen > 0)
     {
+      clutter_vector_registers();
       err = gcry_cipher_gettag (hd, tag, taglen);
       if (err)
 	{
@@ -8723,6 +8977,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       if (piecelen > nplain - pos)
         piecelen = nplain - pos;
 
+      clutter_vector_registers();
       err = gcry_cipher_decrypt (hd, in + pos, piecelen, out + pos, piecelen);
       if (err)
         {
@@ -8739,6 +8994,7 @@ check_one_cipher_core (int algo, int mode, int flags,
 
   if (taglen > 0)
     {
+      clutter_vector_registers();
       err = gcry_cipher_checktag (hd, tag_result, taglen);
       if (err)
 	{
@@ -8767,6 +9023,7 @@ check_one_cipher_core (int algo, int mode, int flags,
         piecelen = nplain - pos;
 
       memcpy (out + pos, plain + pos, piecelen);
+      clutter_vector_registers();
       err = gcry_cipher_encrypt (hd, out + pos, piecelen, NULL, 0);
       if (err)
         {
@@ -8795,6 +9052,7 @@ check_one_cipher_core (int algo, int mode, int flags,
       if (piecelen > nplain - pos)
         piecelen = nplain - pos;
 
+      clutter_vector_registers();
       err = gcry_cipher_decrypt (hd, out + pos, piecelen, NULL, 0);
       if (err)
         {
@@ -9104,6 +9362,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 
   if (key && klen)
     {
+      clutter_vector_registers();
       err = gcry_md_setkey (hd, key, klen);
       if (err)
 	{
@@ -9131,6 +9390,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 
       if (key && klen)
 	{
+	  clutter_vector_registers();
 	  err = gcry_md_setkey (hd2, key, klen);
 	  if (err)
 	    {
@@ -9149,10 +9409,12 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 	  gcry_md_reset (hd);
 	  gcry_md_reset (hd2);
 
+	  clutter_vector_registers();
           gcry_md_write (hd, buf, i);
 	  for (j = 0; j < i; j++)
 	    gcry_md_write (hd2, &buf[j], 1);
 
+	  clutter_vector_registers();
 	  p1 = gcry_md_read (hd, algo);
 	  p2 = gcry_md_read (hd2, algo);
 	  if (memcmp (p1, p2, mdlen))
@@ -9196,6 +9458,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 	  if (*data == '?')
 	    fillbuf_count(aaa, piecelen, 1000 * 1000 - left);
 
+	  clutter_vector_registers();
           gcry_md_write (hd, aaa, piecelen);
 
           left -= piecelen;
@@ -9212,6 +9475,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 	  if (*data == '?')
 	    fillbuf_count(aaa, piecelen, 1000 * 1000 - left);
 
+	  clutter_vector_registers();
           gcry_md_write (hd, aaa, piecelen);
 
           left -= piecelen;
@@ -9223,8 +9487,12 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
         }
     }
   else
-    gcry_md_write (hd, data, len);
+    {
+      clutter_vector_registers();
+      gcry_md_write (hd, data, len);
+    }
 
+  clutter_vector_registers();
   err = gcry_md_copy (&hd2, hd);
   if (err)
     {
@@ -9235,6 +9503,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 
   if (!xof)
     {
+      clutter_vector_registers();
       p = gcry_md_read (hd2, algo);
 
       if (memcmp (p, expect, mdlen))
@@ -9255,12 +9524,14 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
       char buf[1000];
       int outmax = sizeof(buf) > elen ? elen : sizeof(buf);
 
+      clutter_vector_registers();
       err = gcry_md_copy (&hd, hd2);
       if (err)
 	{
 	  fail ("algo %d, gcry_md_copy failed: %s\n", algo, gpg_strerror (err));
 	}
 
+      clutter_vector_registers();
       err = gcry_md_extract(hd2, algo, buf, outmax);
       if (err)
 	{
@@ -9283,6 +9554,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
       memset(buf, 0, sizeof(buf));
 
       /* Extract one byte at time. */
+      clutter_vector_registers();
       for (i = 0; i < outmax && !err; i++)
 	err = gcry_md_extract(hd, algo, &buf[i], 1);
       if (err)
@@ -9334,6 +9606,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 	  /* Extract large chucks, total 1000000 additional bytes. */
 	  for (i = 0; i < 1000; i++)
 	    {
+	      clutter_vector_registers();
 	      err = gcry_md_extract(hd, algo, buf, 1000);
 	      if (!err)
 		gcry_md_write(crc1, buf, 1000);
@@ -9356,6 +9629,7 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 	      if (piecelen > left)
 		piecelen = left;
 
+	      clutter_vector_registers();
 	      err = gcry_md_extract (hd2, algo, buf, piecelen);
 	      if (!err)
 		gcry_md_write(crc2, buf, piecelen);
@@ -9373,7 +9647,9 @@ check_one_md (int algo, const char *data, int len, const char *expect, int elen,
 		piecelen = piecelen * 2 - ((piecelen != startlen) ? startlen : 0);
 	    }
 
+	  clutter_vector_registers();
 	  p1 = gcry_md_read (crc1, crcalgo);
+	  clutter_vector_registers();
 	  p2 = gcry_md_read (crc2, crcalgo);
 
 	  if (memcmp (p1, p2, crclen))
@@ -9449,6 +9725,7 @@ check_one_md_multi (int algo, const char *data, int len, const char *expect)
   iovcnt++;
   assert (iovcnt <= DIM (iov));
 
+  clutter_vector_registers();
   err = gcry_md_hash_buffers (algo, 0, digest, iov, iovcnt);
   if (err)
     {
@@ -9498,6 +9775,7 @@ check_one_md_final(int algo, const char *expect, unsigned int expectlen)
   for (i = 0; i < sizeof(inbuf); i++)
     inbuf[i] = i;
 
+  clutter_vector_registers();
   gcry_md_hash_buffer (algo, xorbuf, NULL, 0);
   for (i = 1; i < sizeof(inbuf); i++)
     {
@@ -11336,6 +11614,7 @@ check_one_mac (int algo, const char *data, int datalen,
       return;
     }
 
+  clutter_vector_registers();
   err = gcry_mac_setkey (hd, key, keylen);
   if (err)
     fail("algo %d, mac gcry_mac_setkey failed: %s\n", algo, gpg_strerror (err));
@@ -11344,6 +11623,7 @@ check_one_mac (int algo, const char *data, int datalen,
 
   if (ivlen && iv)
     {
+      clutter_vector_registers();
       err = gcry_mac_setiv (hd, iv, ivlen);
       if (err)
         fail("algo %d, mac gcry_mac_ivkey failed: %s\n", algo,
@@ -11356,6 +11636,7 @@ check_one_mac (int algo, const char *data, int datalen,
     {
       for (i = 0; i < datalen; i++)
         {
+	  clutter_vector_registers();
           err = gcry_mac_write (hd, &data[i], 1);
           if (err)
             fail("algo %d, mac gcry_mac_write [buf-offset: %d] failed: %s\n",
@@ -11389,6 +11670,7 @@ check_one_mac (int algo, const char *data, int datalen,
               if (*data == '?')
                 fillbuf_count(aaa, piecelen, 1000 * 1000 - left);
 
+	      clutter_vector_registers();
               gcry_mac_write (hd, aaa, piecelen);
 
               left -= piecelen;
@@ -11405,6 +11687,7 @@ check_one_mac (int algo, const char *data, int datalen,
               if (*data == '?')
                 fillbuf_count(aaa, piecelen, 1000 * 1000 - left);
 
+	      clutter_vector_registers();
               gcry_mac_write (hd, aaa, piecelen);
 
               left -= piecelen;
@@ -11417,6 +11700,7 @@ check_one_mac (int algo, const char *data, int datalen,
         }
       else
         {
+	  clutter_vector_registers();
           err = gcry_mac_write (hd, data, datalen);
         }
 
@@ -11426,11 +11710,13 @@ check_one_mac (int algo, const char *data, int datalen,
         goto out;
     }
 
+  clutter_vector_registers();
   err = gcry_mac_verify (hd, expect, maclen);
   if (err)
     fail("algo %d, mac gcry_mac_verify failed: %s\n", algo, gpg_strerror (err));
 
   macoutlen = maclen;
+  clutter_vector_registers();
   err = gcry_mac_read (hd, p, &macoutlen);
   if (err)
     fail("algo %d, mac gcry_mac_read failed: %s\n", algo, gpg_strerror (err));
@@ -12601,6 +12887,16 @@ check_pubkey_sign_ecdsa (int n, gcry_sexp_t skey, gcry_sexp_t pkey)
         /* */    "000102030405060708090A0B0C0D0E0F#))",
         0
       },
+      { 256,
+        "(data (flags sm2)\n"
+        " (hash sm3 #112233445566778899AABBCCDDEEFF00"
+        /* */       "123456789ABCDEF0123456789ABCDEF0#))",
+        0,
+        "(data (flags sm2)\n"
+        " (hash sm3 #B524F552CD82B8B028476E005C377FB1"
+        /* */       "9A87E6FC682D48BB5D42E3D9B9EFFE76#))",
+        0
+      },
       { 0, NULL }
     };
 
@@ -12991,7 +13287,7 @@ check_pubkey (void)
 {
   static const test_spec_pubkey_t pubkeys[] = {
   {
-    GCRY_PK_RSA, FLAG_CRYPT | FLAG_SIGN,
+    GCRY_PK_RSA, FLAG_CRYPT | FLAG_SIGN | FLAG_GRIP,
     {
       "(private-key\n"
       " (rsa\n"
@@ -13029,7 +13325,7 @@ check_pubkey (void)
       "\xa2\x5d\x3d\x69\xf8\x6d\x37\xa4\xf9\x39"}
   },
   {
-    GCRY_PK_DSA, FLAG_SIGN,
+    GCRY_PK_DSA, FLAG_SIGN | FLAG_GRIP,
     {
       "(private-key\n"
       " (DSA\n"
@@ -13074,7 +13370,7 @@ check_pubkey (void)
       "\x4a\xa6\xf9\xeb\x23\xbf\xa9\x12\x2d\x5b" }
   },
   {
-    GCRY_PK_ELG, FLAG_SIGN | FLAG_CRYPT,
+    GCRY_PK_ELG, FLAG_SIGN | FLAG_CRYPT | FLAG_GRIP,
     {
       "(private-key\n"
       " (ELG\n"
@@ -13253,7 +13549,7 @@ check_pubkey (void)
       "        4DDFF75C45415C1D9DD9DD33612CD530EFE137C7C90CD4"
       "        0B0F5621DC3AC1B751CFA0E2634FA0503B3D52639F5D7F"
       "        B72AFD61EA199441D943FFE7F0C70A2759A3CDB84C114E"
-      "        1F9339FDF27F35ECA93677BEEC#)))\n"
+      "        1F9339FDF27F35ECA93677BEEC#)))\n",
 
       "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" }
@@ -13275,7 +13571,30 @@ check_pubkey (void)
       "  (curve secp256k1)\n"
       "  (q #0439A36013301597DAEF41FBE593A02CC513D0B55527EC2D"
       "      F1050E2E8FF49C85C23CBE7DED0E7CE6A594896B8F62888F"
-      "      DBC5C8821305E2EA42BF01E37300116281#)))\n"
+      "      DBC5C8821305E2EA42BF01E37300116281#)))\n",
+
+      "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+      "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" }
+  },
+  { /* sm2 test */
+    GCRY_PK_ECDSA, FLAG_SIGN,
+    {
+      "(private-key\n"
+      " (ecc\n"
+      "  (curve sm2p256v1)\n"
+      "  (q #04"
+      "      8759389A34AAAD07ECF4E0C8C2650A4459C8D926EE2378324E0261C52538CB47"
+      "      7528106B1E0B7C8DD5FF29A9C86A89065656EB33154BC0556091EF8AC9D17D78#)"
+      "  (d #41EBDBA9C98CBECCE7249CF18BFD427FF8EA0B2FAB7B9D305D9D9BF4DB6ADFC2#)"
+      "))",
+
+      "(public-key\n"
+      " (ecc\n"
+      "  (curve sm2p256v1)\n"
+      "  (q #04"
+      "      8759389A34AAAD07ECF4E0C8C2650A4459C8D926EE2378324E0261C52538CB47"
+      "      7528106B1E0B7C8DD5FF29A9C86A89065656EB33154BC0556091EF8AC9D17D78#)"
+      "))",
 
       "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" }
